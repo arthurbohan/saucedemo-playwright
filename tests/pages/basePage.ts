@@ -3,7 +3,7 @@ import { Page, Locator } from '@playwright/test'
 export abstract class BasePage {
   constructor(protected page: Page) {}
 
-  // Каждый наследник обязан реализовать метод goto()
+  // Every subclass must implement the goto() method.
   abstract goto(): Promise<void>
 
   async waitForPageLoad() {
@@ -18,7 +18,7 @@ export abstract class BasePage {
     return this.page.title()
   }
 
-  // Хелпер: ждёт появления элемента и возвращает его текст
+  // Helper: waits for an element to appear and returns its text
   async getTextOf(locator: Locator): Promise<string> {
     await locator.waitFor({ state: 'visible' })
     return locator.innerText()

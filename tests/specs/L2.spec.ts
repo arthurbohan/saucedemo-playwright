@@ -104,7 +104,7 @@ test('L2: problemUserPage — сессия работает, но UI содер�
     await expect(problemUserPage).toHaveURL(/inventory/)
     const images = problemUserPage.locator('.inventory_item_img img')
     const srcs = await images.evaluateAll(imgs =>
-        (imgs as HTMLImageElement[]).map(img => img.src)
+        imgs.map((img: any) => img.src)
     )
     const uniqueSrcs = new Set(srcs)
     console.log(`  problem_user видит ${uniqueSrcs.size} уникальных картинок из ${srcs.length}`)
