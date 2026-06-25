@@ -16,8 +16,6 @@ export class InventoryPage extends BasePage {
         super(page)
     }
 
-    // ── Locators ──────────────────────────────────────────────────
-
     get inventoryList() {
         return this.page.locator('.inventory_list')
     }
@@ -45,8 +43,9 @@ export class InventoryPage extends BasePage {
     get burgerMenu() {
         return this.page.locator('#react-burger-menu-btn')
     }
-
-    // ── Methods ───────────────────────────────────────────────────
+    get openedBurgerMenu() {
+        return this.page.locator('.bm-menu-wrap')
+    }
 
     addToCartBtn(slug: ProductSlug) {
         return this.page.getByTestId(`add-to-cart-${slug}`)

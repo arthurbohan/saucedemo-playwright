@@ -12,8 +12,6 @@ export class LoginPage extends BasePage {
         super(page)
     }
 
-    // ── Locators ──────────────────────────────────────────────────
-
     get usernameInput() {
         return this.page.getByTestId('username')
     }
@@ -35,8 +33,6 @@ export class LoginPage extends BasePage {
     get passwordHint() {
         return this.page.locator('.login_password')
     }
-
-    // ── Methods ───────────────────────────────────────────────────
 
     async goto() {
         await this.page.goto('/')

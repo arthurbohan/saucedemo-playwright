@@ -6,8 +6,6 @@ export class CartPage extends BasePage {
     super(page)
   }
 
-  // ── Locators ──────────────────────────────────────────────────
-
   get cartItems() {
     return this.page.locator('.cart_item')
   }
@@ -26,8 +24,6 @@ export class CartPage extends BasePage {
   get continueShoppingButton() {
     return this.page.getByTestId('continue-shopping')
   }
-
-  // ── Methods ───────────────────────────────────────────────────
 
   removeItemBtn(name: string) {
     // Locate the delete button associated with a specific product name
