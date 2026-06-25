@@ -28,8 +28,7 @@ export class CartPage extends BasePage {
   removeItemBtn(name: string) {
     // Locate the delete button associated with a specific product name
     return this.page.locator('.cart_item')
-      .filter({ hasText: name })
-      .locator('button[data-test^="remove"]')
+      .getByTestId(`remove-${name}`)
   }
 
   async goto() {

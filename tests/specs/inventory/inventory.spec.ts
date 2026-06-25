@@ -1,5 +1,5 @@
-import { test, expect } from '../fixtures'
-import { ProductSlug }  from '../pages/inventoryPage'
+import { test, expect } from '../../fixtures'
+import { ProductSlug }  from '../../pages/inventoryPage'
 
 const ALL_SLUGS: ProductSlug[] = [
   'sauce-labs-backpack',
