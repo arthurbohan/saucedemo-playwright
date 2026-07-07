@@ -1,0 +1,262 @@
+import { test, expect } from '../../fixtures'
+import type { Post, Comment, User, Todo } from '../../types/api.types'
+
+test.describe('GET: Posts', () => {
+
+  test('Get all posts — an array of 100 elements', async ({ apiClient }) => {
+    const res = await apiClient.get('posts')
+
+    expect(res.status()).toBe(200)
+
+    const posts = await res.json() as Post[]
+    expect(Array.isArray(posts)).toBe(true)
+    expect(posts).toHaveLength(100)
+  })
+
+  test('Get a post by ID — the structure is identical', async ({ apiClient }) => {
+    const res = await apiClient.get('posts/1')
+
+    expect(res.ok()).toBeTruthy()
+
+    const post = await res.json() as Post
+    expect(post.id).toBe(1)
+    expect(post.userId).toBeDefined()
+    expect(post.title).toBeTruthy()
+    expect(post.body).toBeTruthy()
+  })
+
+  test('Get a non-existent post — 404', async ({ apiClient }) => {
+    const res = await apiClient.get('posts/9999')
+    expect(res.status()).toBe(404)
+  })
+
+  test('Filter posts by userId — returns only posts by that user', async ({ apiClient }) => {
+    const res = await apiClient.get('posts?userId=1')
+
+    expect(res.status()).toBe(200)
+
+    const posts = await res.json() as Post[]
+    expect(posts.length).toBeGreaterThan(0)
+    posts.forEach(post => expect(post.userId).toBe(1))
+  })
+
+  test('Get comments for a post — nested route', async ({ apiClient }) => {
+    const res = await apiClient.get('posts/1/comments')
+
+    expect(res.status()).toBe(200)
+
+    const comments = await res.json() as Comment[]
+    expect(comments.length).toBeGreaterThan(0)
+    comments.forEach(c => expect(c.postId).toBe(1))
+    comments.forEach(c => expect(c.email).toContain('@'))
+  })
+
+})
+
+test.describe('GET: Users', () => {
+
+  test('Get all users — exactly 10', async ({ apiClient }) => {
+    const res = await apiClient.get('users')
+
+    expect(res.status()).toBe(200)
+
+    const users = await res.json() as User[]
+    expect(users).toHaveLength(10)
+  })
+
+  test('Each user has required fields', async ({ apiClient }) => {
+    const res = await apiClient.get('users')
+    const users = await res.json() as User[]
+
+    users.forEach(user => {
+      expect(user.id).toBeDefined()
+      expect(user.name).toBeTruthy()
+      expect(user.username).toBeTruthy()
+      expect(user.email).toContain('@')
+    })
+  })
+
+  test('Get user by ID', async ({ apiClient }) => {
+    const res = await apiClient.get('users/1')
+
+    expect(res.ok()).toBeTruthy()
+
+    const user = await res.json() as User
+    expect(user.id).toBe(1)
+    expect(user.name).toBe('Leanne Graham')
+    expect(user.username).toBe('Bret')
+  })
+
+})
+
+test.describe('GET: Todos', () => {
+
+  test('Get all todos — 200 items', async ({ apiClient }) => {
+    const res = await apiClient.get('todos')
+
+    expect(res.status()).toBe(200)
+
+    const todos = await res.json() as Todo[]
+    expect(todos).toHaveLength(200)
+  })
+
+  test('Filter todos by completion status', async ({ apiClient }) => {
+    const res = await apiClient.get('todos')
+    const todos = await res.json() as Todo[]
+
+    const completed = todos.filter(t => t.completed)
+    const uncompleted = todos.filter(t => !t.completed)
+
+    expect(completed.length).toBeGreaterThan(0)
+    expect(uncompleted.length).toBeGreaterThan(0)
+  })
+
+  test('Filter todos by completed=true', async ({ apiClient }) => {
+    const res = await apiClient.get('todos?completed=true')
+
+    expect(res.status()).toBe(200)
+
+    const todos = await res.json() as Todo[]
+    todos.forEach(t => expect(t.completed).toBe(true))
+  })
+
+})
+
+test.describe('POST: resources creation', () => {
+
+  test('Create a post — 201 + returns id', async ({ apiClient }) => {
+    const res = await apiClient.post('posts', {
+      title: 'Test Post by Arthur',
+      body: 'Created during Playwright API practice',
+      userId: 1,
+    })
+
+    expect(res.status()).toBe(201)
+
+    const post = await res.json() as Post & { id: number }
+    expect(post.title).toBe('Test Post by Arthur')
+    expect(post.userId).toBe(1)
+    expect(post.id).toBe(101)
+  })
+
+  test('Create a post without userId — server still accepts it', async ({ apiClient }) => {
+    const res = await apiClient.post('posts', {
+      title: 'Post without userId',
+      body: 'Testing optional fields',
+    })
+
+    expect(res.status()).toBe(201)
+
+    const post = await res.json() as { id: number; title: string }
+    expect(post.title).toBe('Post without userId')
+    expect(post.id).toBeDefined()
+  })
+
+})
+
+test.describe('PUT / PATCH: resources update', () => {
+
+  test('PUT fully replaces the post', async ({ apiClient }) => {
+    const res = await apiClient.put('posts/1', {
+      id: 1,
+      title: 'Updated Title',
+      body: 'Updated body content',
+      userId: 1,
+    })
+
+    expect(res.status()).toBe(200)
+
+    const post = await res.json() as Post
+    expect(post.title).toBe('Updated Title')
+    expect(post.body).toBe('Updated body content')
+    expect(post.id).toBe(1)
+  })
+
+  test('PATCH updates only the provided fields', async ({ apiClient }) => {
+    const res = await apiClient.patch('posts/1', {
+      title: 'Only Title Changed',
+    })
+
+    expect(res.status()).toBe(200)
+
+    const post = await res.json() as Post
+    expect(post.title).toBe('Only Title Changed')
+    expect(post.id).toBe(1)
+  })
+
+})
+
+test.describe('DELETE: resources deletion', () => {
+
+  test('Delete a post — 200 with empty body', async ({ apiClient }) => {
+    const res = await apiClient.delete('posts/1')
+
+    expect(res.status()).toBe(200)
+
+    const body = await res.json() as object
+    expect(body).toEqual({})
+  })
+
+})
+
+test.describe('Chain of requests — full CRUD cycle', () => {
+
+  test('create post → get → update → delete', async ({ apiClient }) => {
+    // 1. CREATE
+    const createRes = await apiClient.post('posts', {
+      title: 'CRUD Test Post',
+      body: 'Testing full CRUD cycle',
+      userId: 1,
+    })
+    expect(createRes.status()).toBe(201)
+    const created = await createRes.json() as Post
+    console.log(`\n  Created post: id=${created.id}, title="${created.title}"`)
+
+    // 2. GET
+    const getRes = await apiClient.get('posts/1')
+    expect(getRes.status()).toBe(200)
+    const fetched = await getRes.json() as Post
+    expect(fetched.id).toBe(1)
+
+    // 3. UPDATE
+    const updateRes = await apiClient.put('posts/1', {
+      id: 1,
+      title: 'CRUD Test Post Updated',
+      body: 'Updated during CRUD cycle',
+      userId: 1,
+    })
+    expect(updateRes.status()).toBe(200)
+    const updated = await updateRes.json() as Post
+    expect(updated.title).toBe('CRUD Test Post Updated')
+
+    // 4. DELETE
+    const deleteRes = await apiClient.delete('posts/1')
+    expect(deleteRes.status()).toBe(200)
+
+    console.log('  CRUD cycle completed successfully ✅')
+  })
+
+  test('get user → their posts → comments to the first post', async ({ apiClient }) => {
+    // 1. Get the user
+    const userRes = await apiClient.get('users/1')
+    const user = await userRes.json() as User
+    expect(user.id).toBe(1)
+
+    // 2. Get their posts
+    const postsRes = await apiClient.get(`posts?userId=${user.id}`)
+    const posts = await postsRes.json() as Post[]
+    expect(posts.length).toBeGreaterThan(0)
+
+    // 3. Get the first post and its comments
+    const firstPost = posts[0]
+    const commentsRes = await apiClient.get(`posts/${firstPost.id}/comments`)
+    const comments = await commentsRes.json() as Comment[]
+
+    expect(comments.length).toBeGreaterThan(0)
+    comments.forEach(c => expect(c.postId).toBe(firstPost.id))
+
+    console.log(`\n  User: ${user.name}`)
+    console.log(`  Posts: ${posts.length}`)
+    console.log(`  Comments to post #${firstPost.id}: ${comments.length}`)
+  })
+})

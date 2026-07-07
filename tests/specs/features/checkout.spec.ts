@@ -30,7 +30,6 @@ test.describe('Checkout flow', () => {
     })
 
     test.describe('Step 2: Order overview', () => {
-
         test('total sum is greater than 0', async ({ checkoutPage }) => {
             await checkoutPage.fillShippingInfo(VALID_SHIPPING)
             const total = await checkoutPage.getSummaryTotal()

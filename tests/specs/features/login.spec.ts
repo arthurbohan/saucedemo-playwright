@@ -1,7 +1,6 @@
 import { test, expect } from '../../fixtures'
 
 test.describe('Login page', () => {
-
     test.describe('Page load', () => {
 
         test('page title — Swag Labs', async ({ loginPage, page }) => {
