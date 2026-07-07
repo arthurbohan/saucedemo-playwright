@@ -1,61 +1,46 @@
-# 🧪 Saucedemo — Playwright Fixtures Practice
+# 🧪 Saucedemo — Playwright Practice
 
-Проект с правильной структурой для изучения Playwright Fixtures на реальном сайте.
+A structured project designed for learning Playwright on a real website.
 
----
-
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
 ```bash
 npm install
 npx playwright install chromium
-npm test
+npm test test:api
+npm test test:e2e
 ```
 
----
-
-## 📁 Структура проекта
+## 📁 Project Structure
 
 ```
 saucedemo-playwright/
 │
-├── pages/                          ← Page Objects (один класс = один файл)
-│   ├── LoginPage.ts                   Форма логина
-│   ├── InventoryPage.ts               Каталог товаров
-│   ├── CartPage.ts                    Корзина
-│   ├── CheckoutPage.ts                Оформление заказа
-│   └── index.ts                       Barrel-экспорт (import из одного места)
+├── pages/                  ← Page Objects (one class = one file)
+│   ├── LoginPage.ts        Login form
+│   ├── InventoryPage.ts    Product catalog
+│   ├── CartPage.ts         Shopping cart
+│   ├── CheckoutPage.ts     Checkout page
+│   └── index.ts            Barrel export (import everything from one place)
 │
-├── fixtures/                       ← Fixtures (один файл = одна зона ответственности)
-│   ├── auth.fixture.ts                Авторизация через localStorage
-│   ├── pages.fixture.ts               Page Objects → fixtures (зависит от auth)
-│   └── index.ts                       Финальный mergeTests + export { test, expect }
+├── fixtures/               ← Fixtures (one file = one area of responsibility)
+│   ├── auth.fixture.ts     Authorization via localStorage
+│   ├── pages.fixture.ts    Page Objects → fixtures (depends on auth)
+│   └── index.ts            Final mergeTests + export { test, expect }
 │
-├── tests/                          ← Тесты (разбиты по фичам)
-│   ├── auth.setup.ts                  Глобальный setup: сохраняет storageState
-│   ├── login/
-│   │   └── login.spec.ts              Тесты страницы логина
-│   ├── inventory/
-│   │   └── inventory.spec.ts          Тесты каталога (сортировка, корзина)
-│   ├── cart/
-│   │   └── cart.spec.ts               Тесты корзины
-│   └── checkout/
-│       └── checkout.spec.ts           Тесты оформления заказа
+├── tests/                  ← Tests (organized by features)
+│   ├── api/
+│   │   └── api.spec.ts     API tests
+│   ├── auth.setup.ts       Global setup: saves storageState
+│   ├── features/
+│   │   └── login.spec.ts   Login page tests
+│   │   └── inventory.spec.ts Catalog tests (sorting, cart)
+│   │   └── cart.spec.ts      Cart tests
+│   └── checkout.spec.ts    Checkout process tests
 │
-├── .auth/                          ← Сгенерированные storageState файлы (.gitignore)
+├── .auth/                  ← Generated storageState files (.gitignore)
 │   └── standard.json
 │
 ├── playwright.config.ts
 └── package.json
 ```
-
----
-
-## 👤 Пользователи saucedemo
-
-| Username | Пароль | Особенность |
-|---|---|---|
-| `standard_user` | `secret_sauce` | Всё работает нормально |
-| `locked_out_user` | `secret_sauce` | Заблокирован, не может войти |
-| `problem_user` | `secret_sauce` | Баги в UI (сломанные картинки) |
-| `performance_glitch_user` | `secret_sauce` | Медленный логин (~5 сек) |
