@@ -1,13 +1,17 @@
-# 🧪 Saucedemo — Playwright Practice
+# 🧪 Saucedemo/Jsonplaceholder — Playwright Practice
 
 A structured project designed for learning Playwright on a real website.
+
+### 💻 UI / E2E tests (Saucedemo)
+
+### 🔌 API tests (JSONPlaceholder)
 
 ## 🚀 Quick Start
 
 ```bash
 npm install
 npx playwright install chromium
-npm test test:api
+npm test test:api 
 npm test test:e2e
 ```
 
@@ -25,6 +29,7 @@ saucedemo-playwright/
 │
 ├── fixtures/               ← Fixtures (one file = one area of responsibility)
 │   ├── auth.fixture.ts     Authorization via localStorage
+│   ├── api.fixture.ts      API helper for https://jsonplaceholder.typicode.com 
 │   ├── pages.fixture.ts    Page Objects → fixtures (depends on auth)
 │   └── index.ts            Final mergeTests + export { test, expect }
 │
