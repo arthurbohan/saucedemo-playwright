@@ -1,10 +1,9 @@
 # 🧪 Saucedemo/Jsonplaceholder — Playwright Practice
 
-A structured project designed for learning Playwright on a real website.
+A structured project designed for learning Playwright on a real website:
 
-### 💻 UI / E2E tests (Saucedemo)
-
-### 🔌 API tests (JSONPlaceholder)
+ 💻 UI / E2E tests (Saucedemo)
+ 🔌 API tests (JSONPlaceholder)
 
 ## 🚀 Quick Start
 
