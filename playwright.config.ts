@@ -1,9 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
-  testDir: './tests',
   testMatch: 'tests/specs/**/*.spec.ts',
-  // fullyParallel: true,
   workers: 1,
   retries: process.env.CI ? 2 : 0,
   maxFailures: process.env.CI ? 10 : 0,
@@ -13,7 +11,6 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: 'https://www.saucedemo.com',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     headless: process.env.CI ? true : false,
@@ -24,13 +21,26 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
+      use: {
+        baseURL: 'https://www.saucedemo.com',
+      }
     },
     {
-      name: 'chromium',
+      name: 'sd-e2e',
+      testDir: './tests/specs/features',
       dependencies: ['setup'],
       use: {
+        baseURL: 'https://www.saucedemo.com',
         storageState: 'tests/.auth/standard.json'
       }
+    },
+    {
+      name: 'jp-api',
+      testDir: './tests/specs/api',
+      use: {
+        baseURL: 'https://jsonplaceholder.typicode.com/',
+        browserName: undefined, 
+      },
     }
   ],
 })

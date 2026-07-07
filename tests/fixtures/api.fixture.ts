@@ -26,7 +26,6 @@ export const apiFixtures = base.extend<ApiFixtures>({
     apiClient: async ({ playwright }, use) => {
 
         const apiContext = await playwright.request.newContext({
-            baseURL: 'https://jsonplaceholder.typicode.com/',
             extraHTTPHeaders: {
                 'Content-Type': 'application/json',
             },

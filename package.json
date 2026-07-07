@@ -3,11 +3,8 @@
   "version": "1.0.0",
   "description": "playwright test suite for saucedemo.com",
   "scripts": {
-    "test": "npx playwright test",
-    "test:ui": "npx playwright test --ui",
-    "test:debug": "npx playwright test --debug",
-    "report": "npx playwright show-report",
-    "codegen": "npx playwright codegen https://www.saucedemo.com"
+    "test:api": "playwright test --project=jp-api",
+    "test:e2e": "playwright test --project=sd-e2e"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
