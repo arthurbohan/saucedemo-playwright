@@ -8,6 +8,11 @@ export default defineConfig({
   reporter: [
     ['html', { open: 'never' }],
     ['list'],
+    ['allure-playwright', {
+      detail: true,
+      outputFolder: 'allure-results',
+      suiteTitle: true,
+    }],
   ],
 
   use: {
@@ -39,7 +44,7 @@ export default defineConfig({
       testDir: './tests/specs/api',
       use: {
         baseURL: 'https://jsonplaceholder.typicode.com/',
-        browserName: undefined, 
+        browserName: undefined,
       },
     }
   ],

@@ -16,8 +16,7 @@ npm test test:e2e
 
 ## 📁 Project Structure
 
-```
-saucedemo-playwright/
+```saucedemo-playwright/
 │
 ├── pages/                  ← Page Objects (one class = one file)
 │   ├── LoginPage.ts        Login form

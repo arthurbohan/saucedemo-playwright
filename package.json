@@ -3,11 +3,17 @@
   "version": "1.0.0",
   "description": "playwright test suite for saucedemo.com",
   "scripts": {
+    "test": "playwright test",
+    "test:e2e": "playwright test --project=sd-e2e",
     "test:api": "playwright test --project=jp-api",
-    "test:e2e": "playwright test --project=sd-e2e"
+    "allure:gen": "allure generate allure-results --clean -o allure-report",
+    "allure:open": "allure open allure-report",
+    "allure:report": "npm run allure:gen && npm run allure:open"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
-    "@types/node": "^25.9.3"
+    "@types/node": "^25.9.3",
+    "allure-commandline": "^2.43.0",
+    "allure-playwright": "^3.10.2"
   }
 }

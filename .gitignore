@@ -7,3 +7,5 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 /tests/.auth/standard.json
+allure-results/
+allure-report/
