@@ -6,6 +6,7 @@
     "test": "playwright test",
     "test:e2e": "playwright test --project=sd-e2e",
     "test:api": "playwright test --project=jp-api",
+    "report:pw": "playwright show-report",
     "allure:gen": "allure generate allure-results --clean -o allure-report",
     "allure:open": "allure open allure-report",
     "allure:report": "npm run allure:gen && npm run allure:open"
