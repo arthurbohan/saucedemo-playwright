@@ -69,7 +69,7 @@ test.describe('Checkout flow', () => {
             await inventoryPage.goToCart()
 
             // 2. Go to checkout
-            const { CartPage, CheckoutPage } = await import('../../pages')
+            const { CartPage, CheckoutPage } = await import('../../pages/index')
             const cart = new CartPage(page)
             await cart.checkout()
 
