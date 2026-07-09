@@ -2,7 +2,6 @@
   "name": "saucedemo-playwright",
   "version": "1.0.0",
   "description": "playwright test suite for saucedemo.com",
-  "type": "module",
   "scripts": {
     "test": "playwright test",
     "test:e2e": "playwright test --project=sd-e2e",
