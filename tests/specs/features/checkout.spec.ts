@@ -1,16 +1,14 @@
 import { test, expect } from '../../fixtures'
+import { CartPage, CheckoutPage } from '../../pages'
+import { ShippingInfoBuilder } from '../../builders'
 
-const VALID_SHIPPING: import('../../pages').ShippingInfo = {
-    firstName: 'Arthur',
-    lastName: 'Bokhan',
-    postalCode: '220000',
-}
+const VALID_SHIPPING = new ShippingInfoBuilder().build()
 
 test.describe('Checkout flow', () => {
 
     test.describe('Step 1: Shipping info', () => {
 
-        test('empty name shows error', async ({ checkoutPage }) => {
+        test('empty firstName shows error', async ({ checkoutPage }) => {
             await checkoutPage.continueButton.click()
             await expect(checkoutPage.errorMessage).toContainText('First Name is required')
         })
@@ -27,9 +25,43 @@ test.describe('Checkout flow', () => {
             await expect(page).toHaveURL(/checkout-step-two/)
         })
 
+        test('builder: empty firstName — validation error', async ({ checkoutPage }) => {
+            const data = new ShippingInfoBuilder().withEmptyFirstName().build()
+
+            await checkoutPage.firstNameInput.fill(data.firstName)
+            await checkoutPage.lastNameInput.fill(data.lastName)
+            await checkoutPage.postalCodeInput.fill(data.postalCode)
+            await checkoutPage.continueButton.click()
+
+            await expect(checkoutPage.errorMessage).toContainText('First Name is required')
+        })
+
+        test('builder: empty lastName — validation error', async ({ checkoutPage }) => {
+            const data = new ShippingInfoBuilder().withEmptyLastName().build()
+
+            await checkoutPage.firstNameInput.fill(data.firstName)
+            await checkoutPage.lastNameInput.fill(data.lastName)
+            await checkoutPage.postalCodeInput.fill(data.postalCode)
+            await checkoutPage.continueButton.click()
+
+            await expect(checkoutPage.errorMessage).toContainText('Last Name is required')
+        })
+
+        test('builder: empty postalCode — validation error', async ({ checkoutPage }) => {
+            const data = new ShippingInfoBuilder().withEmptyPostalCode().build()
+
+            await checkoutPage.firstNameInput.fill(data.firstName)
+            await checkoutPage.lastNameInput.fill(data.lastName)
+            await checkoutPage.postalCodeInput.fill(data.postalCode)
+            await checkoutPage.continueButton.click()
+
+            await expect(checkoutPage.errorMessage).toContainText('Postal Code is required')
+        })
+
     })
 
     test.describe('Step 2: Order overview', () => {
+
         test('total sum is greater than 0', async ({ checkoutPage }) => {
             await checkoutPage.fillShippingInfo(VALID_SHIPPING)
             const total = await checkoutPage.getSummaryTotal()
@@ -63,19 +95,20 @@ test.describe('Checkout flow', () => {
 
     test.describe('Full E2E: add → buy → return', () => {
 
-        test('full purchase cycle', async ({ inventoryPage, page }) => {
+        test('full purchase cycle with random shipping data', async ({ inventoryPage, page }) => {
+            const shipping = new ShippingInfoBuilder().build()
+
             // 1. Add item
             await inventoryPage.addToCart('sauce-labs-backpack')
             await inventoryPage.goToCart()
 
             // 2. Go to checkout
-            const { CartPage, CheckoutPage } = await import('../../pages/index')
             const cart = new CartPage(page)
             await cart.checkout()
 
             // 3. Fill shipping info
             const checkout = new CheckoutPage(page)
-            await checkout.fillShippingInfo(VALID_SHIPPING)
+            await checkout.fillShippingInfo(shipping)
 
             // 4. Complete order
             await checkout.finish()

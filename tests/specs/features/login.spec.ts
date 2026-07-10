@@ -99,7 +99,6 @@ test.describe('Login page', () => {
             await loginPage.login('standard_user', 'wrong')
             expect(await loginPage.isErrorVisible()).toBe(true)
 
-            // Using your dismissError() — it already waits for state: 'hidden'
             await loginPage.dismissError()
             expect(await loginPage.isErrorVisible()).toBe(false)
         })

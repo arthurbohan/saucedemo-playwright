@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures'
+import { PostBuilder } from '../../builders'
 import type { Post, Comment, User, Todo } from '../../types/api.types'
 
 test.describe('GET: Posts', () => {
@@ -124,31 +125,61 @@ test.describe('GET: Todos', () => {
 
 test.describe('POST: resources creation', () => {
 
-  test('Create a post — 201 + returns id', async ({ apiClient }) => {
-    const res = await apiClient.post('posts', {
-      title: 'Test Post by Arthur',
-      body: 'Created during Playwright API practice',
-      userId: 1,
-    })
+  test('builder: create post with random data — 201 + returns id', async ({ apiClient }) => {
+    const payload = new PostBuilder().withUserId(1).build()
+
+    const res = await apiClient.post('posts', payload)
 
     expect(res.status()).toBe(201)
 
-    const post = await res.json() as Post & { id: number }
-    expect(post.title).toBe('Test Post by Arthur')
+    const post = await res.json() as Post
+    expect(post.title).toBe(payload.title)
+    expect(post.body).toBe(payload.body)
     expect(post.userId).toBe(1)
     expect(post.id).toBe(101)
   })
 
-  test('Create a post without userId — server still accepts it', async ({ apiClient }) => {
-    const res = await apiClient.post('posts', {
-      title: 'Post without userId',
-      body: 'Testing optional fields',
-    })
+  test('builder: create posts for multiple users', async ({ apiClient }) => {
+    const payloads = [1, 2, 3].map(userId =>
+      new PostBuilder().withUserId(userId).build()
+    )
+
+    for (const payload of payloads) {
+      const res = await apiClient.post('posts', payload)
+      expect(res.status()).toBe(201)
+
+      const post = await res.json() as Post
+      expect(post.userId).toBe(payload.userId)
+      expect(post.title).toBe(payload.title)
+    }
+  })
+
+  test('builder: create post with specific title', async ({ apiClient }) => {
+    const payload = new PostBuilder()
+      .withUserId(5)
+      .withTitle('QA Automation with Playwright')
+      .build()
+
+    const res = await apiClient.post('posts', payload)
 
     expect(res.status()).toBe(201)
 
-    const post = await res.json() as { id: number; title: string }
-    expect(post.title).toBe('Post without userId')
+    const post = await res.json() as Post
+    expect(post.title).toBe('QA Automation with Playwright')
+    expect(post.userId).toBe(5)
+  })
+
+  test('create a post without userId — server still accepts it', async ({ apiClient }) => {
+    const payload = new PostBuilder()
+      .withTitle('Post without explicit userId')
+      .build()
+
+    const res = await apiClient.post('posts', payload)
+
+    expect(res.status()).toBe(201)
+
+    const post = await res.json() as Post
+    expect(post.title).toBe(payload.title)
     expect(post.id).toBeDefined()
   })
 
@@ -156,31 +187,31 @@ test.describe('POST: resources creation', () => {
 
 test.describe('PUT / PATCH: resources update', () => {
 
-  test('PUT fully replaces the post', async ({ apiClient }) => {
-    const res = await apiClient.put('posts/1', {
-      id: 1,
-      title: 'Updated Title',
-      body: 'Updated body content',
-      userId: 1,
-    })
+  test('builder: PUT fully replaces the post', async ({ apiClient }) => {
+    const payload = new PostBuilder()
+      .withUserId(1)
+      .withTitle('Updated via Builder')
+      .build()
+
+    const res = await apiClient.put('posts/1', { id: 1, ...payload })
 
     expect(res.status()).toBe(200)
 
     const post = await res.json() as Post
-    expect(post.title).toBe('Updated Title')
-    expect(post.body).toBe('Updated body content')
+    expect(post.title).toBe('Updated via Builder')
+    expect(post.userId).toBe(1)
     expect(post.id).toBe(1)
   })
 
-  test('PATCH updates only the provided fields', async ({ apiClient }) => {
-    const res = await apiClient.patch('posts/1', {
-      title: 'Only Title Changed',
-    })
+  test('builder: PATCH updates only the provided fields', async ({ apiClient }) => {
+    const payload = new PostBuilder().withTitle('Only Title Patched').build()
+
+    const res = await apiClient.patch('posts/1', { title: payload.title })
 
     expect(res.status()).toBe(200)
 
     const post = await res.json() as Post
-    expect(post.title).toBe('Only Title Changed')
+    expect(post.title).toBe(payload.title)
     expect(post.id).toBe(1)
   })
 
@@ -201,16 +232,14 @@ test.describe('DELETE: resources deletion', () => {
 
 test.describe('Chain of requests — full CRUD cycle', () => {
 
-  test('create post → get → update → delete', async ({ apiClient }) => {
+  test('builder: create → get → update → delete', async ({ apiClient }) => {
     // 1. CREATE
-    const createRes = await apiClient.post('posts', {
-      title: 'CRUD Test Post',
-      body: 'Testing full CRUD cycle',
-      userId: 1,
-    })
+    const createPayload = new PostBuilder().withUserId(1).build()
+
+    const createRes = await apiClient.post('posts', createPayload)
     expect(createRes.status()).toBe(201)
     const created = await createRes.json() as Post
-    console.log(`\n  Created post: id=${created.id}, title="${created.title}"`)
+    console.log(`\n  Created: id=${created.id}, title="${created.title}"`)
 
     // 2. GET
     const getRes = await apiClient.get('posts/1')
@@ -218,16 +247,16 @@ test.describe('Chain of requests — full CRUD cycle', () => {
     const fetched = await getRes.json() as Post
     expect(fetched.id).toBe(1)
 
-    // 3. UPDATE
-    const updateRes = await apiClient.put('posts/1', {
-      id: 1,
-      title: 'CRUD Test Post Updated',
-      body: 'Updated during CRUD cycle',
-      userId: 1,
-    })
+    // 3. UPDATE 
+    const updatePayload = new PostBuilder()
+      .withUserId(1)
+      .withTitle('Updated in CRUD cycle')
+      .build()
+
+    const updateRes = await apiClient.put('posts/1', { id: 1, ...updatePayload })
     expect(updateRes.status()).toBe(200)
     const updated = await updateRes.json() as Post
-    expect(updated.title).toBe('CRUD Test Post Updated')
+    expect(updated.title).toBe('Updated in CRUD cycle')
 
     // 4. DELETE
     const deleteRes = await apiClient.delete('posts/1')
@@ -259,4 +288,5 @@ test.describe('Chain of requests — full CRUD cycle', () => {
     console.log(`  Posts: ${posts.length}`)
     console.log(`  Comments to post #${firstPost.id}: ${comments.length}`)
   })
+
 })
