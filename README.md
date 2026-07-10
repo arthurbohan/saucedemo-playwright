@@ -95,12 +95,12 @@ GitHub Actions
 │     ├── npm ci
 │     ├── npx playwright install chromium --with-deps
 │     ├── npm run test:e2e
-│     └── upload artifacts (report, allure-results, screenshots)
+│     └── upload artifacts
 │
 └── test-api
-├── checkout code
-├── setup Node.js 24
-├── npm ci
-├── npm run test:api
-└── upload artifacts
+      ├── checkout code
+      ├── setup Node.js 24
+      ├── npm ci
+      ├── npm run test:api
+      └── upload artifacts
 ```
