@@ -11,11 +11,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ─── JOB 1: UI tests ────────────────────────────────────────────────────────
   test-e2e:
-    name: 🌐 E2E Tests (saucedemo)
+    name: 🌐 E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
+
+    container:
+      image: mcr.microsoft.com/playwright:v1.44.0-jammy
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4]
+        shardTotal: [4]
 
     steps:
       - name: Checkout code
@@ -30,15 +38,66 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
-
-      - name: Run E2E tests
-        run: npm run test:e2e
+      - name: Run E2E tests (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+        run: npx playwright test --project=sd-e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         env:
           CI: true
+          PLAYWRIGHT_SKIP_BROWSER_GC: 1
 
-      - name: Upload Playwright report
+      - name: Upload blob report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blob-report-${{ matrix.shardIndex }}
+          path: blob-report/
+          retention-days: 1
+
+      - name: Upload test artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-artifacts-shard-${{ matrix.shardIndex }}
+          path: test-results/
+          retention-days: 7
+
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-shard-${{ matrix.shardIndex }}
+          path: allure-results/
+          retention-days: 14
+
+  merge-reports:
+    name: 📊 Merge E2E Reports
+    runs-on: ubuntu-latest
+    needs: test-e2e
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports/
+          merge-multiple: true
+
+      - name: Merge reports
+        run: npx playwright merge-reports --reporter=html ./all-blob-reports
+
+      - name: Upload merged HTML report
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -46,23 +105,6 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-      - name: Upload Allure results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: allure-results-e2e
-          path: allure-results/
-          retention-days: 14
-
-      - name: Upload test artifacts on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: test-artifacts-e2e
-          path: test-results/
-          retention-days: 7
-
-  # ─── JOB 2: API tests ───────────────────────────────────────────────────────
   test-api:
     name: 🔌 API Tests (jsonplaceholder)
     runs-on: ubuntu-latest

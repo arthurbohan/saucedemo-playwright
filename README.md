@@ -62,7 +62,8 @@ The configuration is split into two independent projects with different `baseURL
 │   └── index.ts                   Barrel-export
 │
 ├── types/                         ← TypeScrip types
-│   └── api.types.ts               Post, Comment, User, Todo
+│   └── api.types.ts               Post, Comment, User, Todo    
+│
 ├── specs/                         ← Tests (organized by features)
 │   ├── api/
 │   │   └── api.spec.ts            API tests

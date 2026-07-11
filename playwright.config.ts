@@ -5,30 +5,42 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 2 : 0,
   maxFailures: process.env.CI ? 10 : 0,
-  reporter: [
-    ['html', { open: 'never' }],
-    ['list'],
-    ['allure-playwright', {
-      detail: true,
-      outputFolder: 'allure-results',
-      suiteTitle: true,
-    }],
-  ],
+
+  reporter: process.env.CI
+    ? [
+      ['blob'],
+      ['list'],
+      ['allure-playwright', {
+        detail: true,
+        outputFolder: 'allure-results',
+        suiteTitle: true,
+      }],
+    ]
+    : [
+      ['html', { open: 'never' }],
+      ['list'],
+      ['allure-playwright', {
+        detail: true,
+        outputFolder: 'allure-results',
+        suiteTitle: true,
+      }],
+    ],
 
   use: {
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     headless: process.env.CI ? true : false,
     ignoreHTTPSErrors: true,
-    testIdAttribute: 'data-test'
+    testIdAttribute: 'data-test',
   },
+
   projects: [
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
       use: {
         baseURL: 'https://www.saucedemo.com',
-      }
+      },
     },
     {
       name: 'sd-e2e',
@@ -36,8 +48,8 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         baseURL: 'https://www.saucedemo.com',
-        storageState: 'tests/.auth/standard.json'
-      }
+        storageState: 'tests/.auth/standard.json',
+      },
     },
     {
       name: 'jp-api',
@@ -46,6 +58,6 @@ export default defineConfig({
         baseURL: 'https://jsonplaceholder.typicode.com/',
         browserName: undefined,
       },
-    }
+    },
   ],
 })
