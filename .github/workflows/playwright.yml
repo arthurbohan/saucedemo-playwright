@@ -6,11 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pages:    write
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+
+
   test-e2e:
     name: 🌐 E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     runs-on: ubuntu-latest
@@ -52,6 +59,14 @@ jobs:
           path: blob-report/
           retention-days: 1
 
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-shard-${{ matrix.shardIndex }}
+          path: allure-results/
+          retention-days: 1
+
       - name: Upload test artifacts on failure
         uses: actions/upload-artifact@v4
         if: failure()
@@ -60,13 +75,38 @@ jobs:
           path: test-results/
           retention-days: 7
 
+
+  test-api:
+    name: 🔌 API Tests (jsonplaceholder)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run API tests
+        run: npm run test:api
+        env:
+          CI: true
+
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: allure-results-shard-${{ matrix.shardIndex }}
+          name: allure-results-api
           path: allure-results/
-          retention-days: 14
+          retention-days: 1
+
 
   merge-reports:
     name: 📊 Merge E2E Reports
@@ -94,7 +134,7 @@ jobs:
           path: all-blob-reports/
           merge-multiple: true
 
-      - name: Merge reports
+      - name: Merge Playwright reports
         run: npx playwright merge-reports --reporter=html ./all-blob-reports
 
       - name: Upload merged HTML report
@@ -105,41 +145,118 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-  test-api:
-    name: 🔌 API Tests (jsonplaceholder)
+          
+  publish-allure:
+    name: 📈 Publish Allure Report
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    needs: [test-e2e, test-api]
+    if: always()
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download E2E Allure results
+        uses: actions/download-artifact@v4
         with:
-          node-version: 24
-          cache: npm
+          pattern: allure-results-shard-*
+          path: allure-results/
+          merge-multiple: true
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run API tests
-        run: npm run test:api
-        env:
-          CI: true
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report-api
-          path: playwright-report/
-          retention-days: 14
-
-      - name: Upload Allure results
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Download API Allure results
+        uses: actions/download-artifact@v4
         with:
           name: allure-results-api
           path: allure-results/
-          retention-days: 14
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Allure CLI
+        run: |
+          curl -o allure.tgz -L https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
+          tar -xzf allure.tgz
+          sudo mv allure-2.30.0 /opt/allure
+          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
+
+      - name: Generate Allure report
+        run: allure generate allure-results --clean -o allure-report
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report/
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+  notify-telegram:
+    name: 📬 Telegram Notification
+    runs-on: ubuntu-latest
+    needs: [test-e2e, test-api, publish-allure]
+    if: always()   # отправляем даже если тесты упали
+
+    steps:
+      - name: Send Telegram message
+        run: |
+          # Определяем итоговый статус — берём статус обоих тестовых job
+          E2E_STATUS="${{ needs.test-e2e.result }}"
+          API_STATUS="${{ needs.test-api.result }}"
+
+          if [[ "$E2E_STATUS" == "success" && "$API_STATUS" == "success" ]]; then
+            STATUS_ICON="✅"
+            STATUS_TEXT="All tests passed"
+          elif [[ "$E2E_STATUS" == "cancelled" || "$API_STATUS" == "cancelled" ]]; then
+            STATUS_ICON="⚠️"
+            STATUS_TEXT="Run was cancelled"
+          else
+            STATUS_ICON="❌"
+            STATUS_TEXT="Tests failed"
+          fi
+
+          # Ссылка на Allure репорт на GitHub Pages
+          ALLURE_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+
+          # Ссылка на этот прогон в GitHub Actions
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # Ветка или PR
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TRIGGER="PR #${{ github.event.number }}: ${{ github.event.pull_request.title }}"
+          else
+            TRIGGER="Push to ${{ github.ref_name }}"
+          fi
+
+          # Формируем текст сообщения (Markdown для Telegram)
+          MESSAGE="${STATUS_ICON} *Playwright Tests* ${STATUS_ICON}
+
+          *Status:* ${STATUS_TEXT}
+          *Trigger:* ${TRIGGER}
+          *Commit:* \`${{ github.sha }}\`
+
+          🧪 E2E: ${E2E_STATUS}
+          🔌 API: ${API_STATUS}
+
+          📊 [Allure Report](${ALLURE_URL})
+          🔍 [GitHub Actions Run](${RUN_URL})"
+
+          # Отправляем через Telegram Bot API
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\",
+              \"text\": $(echo "$MESSAGE" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),
+              \"parse_mode\": \"Markdown\",
+              \"disable_web_page_preview\": false
+            }"
