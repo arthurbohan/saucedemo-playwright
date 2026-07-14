@@ -9,13 +9,20 @@
     "report:pw": "playwright show-report",
     "allure:gen": "allure generate allure-results --clean -o allure-report",
     "allure:open": "allure open allure-report",
-    "allure:report": "npm run allure:gen && npm run allure:open"
+    "allure:report": "npm run allure:gen && npm run allure:open",
+    "ai:analyze": "npx tsx scripts/analyze-failure.ts",
+    "ai:generate": "npx tsx scripts/generate-tests.ts",
+    "ai:generate:login": "npx tsx scripts/generate-tests.ts login",
+    "ai:generate:inventory": "npx tsx scripts/generate-tests.ts inventory",
+    "ai:generate:checkout": "npx tsx scripts/generate-tests.ts checkout"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",
     "@playwright/test": "^1.61.0",
     "@types/node": "^25.9.3",
     "allure-commandline": "^2.43.0",
-    "allure-playwright": "^3.10.2"
+    "allure-playwright": "^3.10.2",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.23.1"
   }
 }

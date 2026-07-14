@@ -9,3 +9,5 @@ node_modules/
 /tests/.auth/standard.json
 allure-results/
 allure-report/
+.env
+tests/specs/generated/
