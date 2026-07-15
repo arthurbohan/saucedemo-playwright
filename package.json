@@ -23,6 +23,7 @@
     "allure-commandline": "^2.43.0",
     "allure-playwright": "^3.10.2",
     "dotenv": "^17.4.2",
+    "ts-node": "^10.9.2",
     "tsx": "^4.23.1"
   }
 }

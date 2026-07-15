@@ -17,9 +17,10 @@ concurrency:
 
 jobs:
 
+  # ─── JOB 1: E2E tests with sharding + Docker ─────────────────────────────────
 
   test-e2e:
-    name: 🌐 E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+    name: E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -45,11 +46,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run E2E tests (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+      - name: Run E2E tests
         run: npx playwright test --project=sd-e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         env:
           CI: true
           PLAYWRIGHT_SKIP_BROWSER_GC: 1
+
+      # Runs only when tests fail — analyzes root cause via Groq API
+      # Results appear as a collapsible group in GitHub Actions logs
+      - name: AI Analysis of failures
+        if: failure()
+        run: npx ts-node scripts/analyze-failure.ts
+        env:
+          CI: true
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
       - name: Upload blob report
         uses: actions/upload-artifact@v4
@@ -67,6 +77,14 @@ jobs:
           path: allure-results/
           retention-days: 1
 
+      - name: Upload AI analysis summary
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ai-analysis-shard-${{ matrix.shardIndex }}
+          path: ai-analysis-summary.md
+          retention-days: 7
+
       - name: Upload test artifacts on failure
         uses: actions/upload-artifact@v4
         if: failure()
@@ -75,9 +93,10 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  # ─── JOB 2: API tests ────────────────────────────────────────────────────────
 
   test-api:
-    name: 🔌 API Tests (jsonplaceholder)
+    name: API Tests (jsonplaceholder)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -99,6 +118,21 @@ jobs:
         env:
           CI: true
 
+      - name: AI Analysis of failures
+        if: failure()
+        run: npx ts-node scripts/analyze-failure.ts
+        env:
+          CI: true
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Upload AI analysis summary
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ai-analysis-api
+          path: ai-analysis-summary.md
+          retention-days: 7
+
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
         if: always()
@@ -107,9 +141,10 @@ jobs:
           path: allure-results/
           retention-days: 1
 
+  # ─── JOB 3: Merge Playwright shard reports ───────────────────────────────────
 
   merge-reports:
-    name: 📊 Merge E2E Reports
+    name: Merge E2E Reports
     runs-on: ubuntu-latest
     needs: test-e2e
     if: always()
@@ -145,9 +180,10 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-          
+  # ─── JOB 4: Publish Allure to GitHub Pages ───────────────────────────────────
+
   publish-allure:
-    name: 📈 Publish Allure Report
+    name: Publish Allure Report
     runs-on: ubuntu-latest
     needs: [test-e2e, test-api]
     if: always()
@@ -201,57 +237,78 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
+  # ─── JOB 5: Telegram notification with AI analysis ───────────────────────────
+
   notify-telegram:
-    name: 📬 Telegram Notification
+    name: Telegram Notification
     runs-on: ubuntu-latest
     needs: [test-e2e, test-api, publish-allure]
-    if: always()   # отправляем даже если тесты упали
+    if: always()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download AI analysis (if exists)
+        uses: actions/download-artifact@v4
+        if: |
+          needs.test-e2e.result == 'failure' ||
+          needs.test-api.result == 'failure'
+        with:
+          pattern: ai-analysis-*
+          path: ai-summaries/
+          merge-multiple: true
+        continue-on-error: true
+
       - name: Send Telegram message
         run: |
-          # Определяем итоговый статус — берём статус обоих тестовых job
           E2E_STATUS="${{ needs.test-e2e.result }}"
           API_STATUS="${{ needs.test-api.result }}"
 
           if [[ "$E2E_STATUS" == "success" && "$API_STATUS" == "success" ]]; then
-            STATUS_ICON="✅"
+            STATUS_ICON="PASSED"
             STATUS_TEXT="All tests passed"
           elif [[ "$E2E_STATUS" == "cancelled" || "$API_STATUS" == "cancelled" ]]; then
-            STATUS_ICON="⚠️"
+            STATUS_ICON="CANCELLED"
             STATUS_TEXT="Run was cancelled"
           else
-            STATUS_ICON="❌"
+            STATUS_ICON="FAILED"
             STATUS_TEXT="Tests failed"
           fi
 
-          # Ссылка на Allure репорт на GitHub Pages
           ALLURE_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
-
-          # Ссылка на этот прогон в GitHub Actions
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          # Ветка или PR
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             TRIGGER="PR #${{ github.event.number }}: ${{ github.event.pull_request.title }}"
           else
             TRIGGER="Push to ${{ github.ref_name }}"
           fi
 
-          # Формируем текст сообщения (Markdown для Telegram)
-          MESSAGE="${STATUS_ICON} *Playwright Tests* ${STATUS_ICON}
+          MESSAGE="*Playwright Tests — ${STATUS_ICON}*
 
-          *Status:* ${STATUS_TEXT}
-          *Trigger:* ${TRIGGER}
-          *Commit:* \`${{ github.sha }}\`
+          Status: ${STATUS_TEXT}
+          Trigger: ${TRIGGER}
+          Commit: ${{ github.sha }}
 
-          🧪 E2E: ${E2E_STATUS}
-          🔌 API: ${API_STATUS}
+          E2E: ${E2E_STATUS}
+          API: ${API_STATUS}
 
-          📊 [Allure Report](${ALLURE_URL})
-          🔍 [GitHub Actions Run](${RUN_URL})"
+          Allure Report: ${ALLURE_URL}
+          GitHub Actions: ${RUN_URL}"
 
-          # Отправляем через Telegram Bot API
+          # Append short AI analysis snippet if available
+          if [[ -f "ai-summaries/ai-analysis-summary.md" ]]; then
+            AI_SNIPPET=$(grep -v "^#\|^---\|^$" ai-summaries/ai-analysis-summary.md | head -5 | tr '\n' ' ')
+            if [[ -n "$AI_SNIPPET" ]]; then
+              MESSAGE="${MESSAGE}
+
+          AI Analysis (brief):
+          ${AI_SNIPPET}
+          (full analysis available in GitHub Actions logs)"
+            fi
+          fi
+
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{

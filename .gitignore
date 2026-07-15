@@ -11,3 +11,4 @@ allure-results/
 allure-report/
 .env
 tests/specs/generated/
+ai-analysis-summary.md

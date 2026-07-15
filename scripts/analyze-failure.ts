@@ -1,179 +1,261 @@
-import fs from 'fs'
-import path from 'path'
+/**
+ * scripts/analyze-failure.ts
+ *
+ * Reads failed Playwright tests from test-results/
+ * and sends them to Groq API for root cause analysis.
+ *
+ * Used in CI — runs automatically after test failures.
+ * Results appear in GitHub Actions logs and Telegram notifications.
+ *
+ * Local run:
+ *   GROQ_API_KEY=gsk_... npx ts-node scripts/analyze-failure.ts
+ *
+ * Or via .env:
+ *   npm run ai:analyze
+ */
 
-// Load .env file
+import fs   from 'fs'
+import path from 'path'
 import 'dotenv/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type GeminiResponse = {
-    candidates: Array<{
-        content: {
-            parts: Array<{ text: string }>
-        }
-        finishReason: string
-    }>
-    usageMetadata: {
-        promptTokenCount: number
-        candidatesTokenCount: number
-        totalTokenCount: number
-    }
+type GroqResponse = {
+  choices: Array<{
+    message: { content: string }
+    finish_reason: string
+  }>
+  usage: {
+    prompt_tokens:     number
+    completion_tokens: number
+    total_tokens:      number
+  }
 }
 
 type FailureInfo = {
-    filePath: string
-    content: string
-    testName: string
+  filePath: string
+  content:  string
+  testName: string
 }
 
-// ─── Collect Failure Information ──────────────────────────────────────────────
+type AnalysisResult = {
+  testName: string
+  analysis: string
+  error?:   string
+}
+
+// ─── Collect failed tests ─────────────────────────────────────────────────────
 
 function collectFailures(): FailureInfo[] {
-    const testResultsDir = path.join(process.cwd(), 'test-results')
+  const testResultsDir = path.join(process.cwd(), 'test-results')
 
-    if (!fs.existsSync(testResultsDir)) {
-        console.error('❌ "test-results" directory not found.')
-        console.error('   Please run your tests first: npm run test:e2e')
-        process.exit(1)
+  if (!fs.existsSync(testResultsDir)) {
+    console.log('info: test-results directory not found — no failed tests')
+    process.exit(0)
+  }
+
+  const failures: FailureInfo[] = []
+
+  function scan(dir: string) {
+    for (const file of fs.readdirSync(dir)) {
+      const full = path.join(dir, file)
+      if (fs.statSync(full).isDirectory()) {
+        scan(full)
+      } else if (file === 'error-context.md') {
+        const content  = fs.readFileSync(full, 'utf-8')
+        const testName = path.basename(path.dirname(full))
+          .replace(/-chromium$/, '')
+          .replace(/-/g, ' ')
+          .trim()
+
+        failures.push({ filePath: full, content, testName })
+      }
     }
+  }
 
-    const failures: FailureInfo[] = []
+  scan(testResultsDir)
 
-    function scan(dir: string) {
-        fs.readdirSync(dir).forEach(file => {
-            const full = path.join(dir, file)
-            if (fs.statSync(full).isDirectory()) {
-                scan(full)
-            } else if (file === 'error-context.md') {
-                const content = fs.readFileSync(full, 'utf-8')
-                const testName = path.basename(path.dirname(full))
-                    .replace(/-chromium$/, '')
-                    .replace(/-/g, ' ')
-
-                failures.push({ filePath: full, content, testName })
-            }
-        })
-    }
-
-    scan(testResultsDir)
-
-    if (failures.length === 0) {
-        console.log('✅ No failed tests found — everything passed successfully!')
-        process.exit(0)
-    }
-
-    // Sort by modification time — newest first
-    return failures.sort((a, b) =>
-        fs.statSync(b.filePath).mtimeMs - fs.statSync(a.filePath).mtimeMs
-    )
+  return failures.sort((a, b) =>
+    fs.statSync(b.filePath).mtimeMs - fs.statSync(a.filePath).mtimeMs
+  )
 }
 
-// ─── Analyze via Gemini API ──────────────────────────────────────────────────
+// ─── Analyze via Groq API ─────────────────────────────────────────────────────
 
-async function analyzeWithGemini(failure: FailureInfo): Promise<string> {
-    const apiKey = process.env.GEMINI_API_KEY
+async function analyzeWithGroq(failure: FailureInfo): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY
 
-    if (!apiKey) {
-        throw new Error(
-            'GEMINI_API_KEY is not defined.\n' +
-            'Add it to your .env file: GEMINI_API_KEY=AIza...\n' +
-            'Get a key here: aistudio.google.com'
-        )
-    }
+  if (!apiKey) {
+    throw new Error(
+      'GROQ_API_KEY is not set.\n' +
+      'Get a free key (no credit card): console.groq.com\n' +
+      'Add to GitHub Secrets: Settings -> Secrets -> GROQ_API_KEY'
+    )
+  }
 
-    // Using gemini-2.5-flash as the standard stable model for fast text analysis
-    const url = `https://googleapis.com{apiKey}`
+  const prompt = `You are an experienced QA automation engineer. Analyze the failed Playwright test below.
 
-    const prompt = `You are an expert QA Automation Engineer specialized in Playwright and TypeScript.
+Test name: "${failure.testName}"
 
-Failed test: "${failure.testName}"
-
-Contents of error-context.md:
+error-context.md contents:
 ${failure.content}
 
-Analyze the error and provide a clear, concise response strictly using the following markdown format:
+Respond STRICTLY in this format:
 
-## 🔍 Root Cause
-(One or two sentences explaining exactly what went wrong)
+## Root Cause
+(1-2 sentences — exactly what went wrong)
 
-## 📍 Code Location
-(File, line number, or method — if identifiable from the context)
+## Location
+(file:line or method name if visible in the context)
 
-## 🛠 Solution
-(Concrete steps required to fix the issue)
+## Fix
+(concrete steps — what needs to be changed)
 
-## 💡 Fix Example
-(If applicable, provide a code snippet demonstrating the corrected implementation)
+## Code
+(fixed code snippet if needed, otherwise skip this section)`
 
-Be direct, highly technical, and avoid any introductory or conversational filler.`
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model:       'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      max_tokens:  1024,
+      messages: [
+        {
+          role:    'system',
+          content: 'You are a QA automation engineer. Be concise and precise. Focus only on the test failure analysis.',
+        },
+        {
+          role:    'user',
+          content: prompt,
+        },
+      ],
+    }),
+  })
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{ text: prompt }]
-            }],
-            generationConfig: {
-                temperature: 0.2,   // Low temperature for precise, predictable answers
-                maxOutputTokens: 1024,
-            }
-        }),
-    })
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`Groq API ${response.status}: ${error}`)
+  }
 
-    if (!response.ok) {
-        const error = await response.text()
-        throw new Error(`Gemini API error ${response.status}: ${error}`)
-    }
+  const data = await response.json() as GroqResponse
 
-    const data = await response.json() as GeminiResponse
+  console.log(
+    `  Tokens: prompt=${data.usage.prompt_tokens} ` +
+    `completion=${data.usage.completion_tokens} ` +
+    `total=${data.usage.total_tokens}`
+  )
 
-    const usage = data.usageMetadata
-    console.log(
-        `  📊 Tokens: input=${usage.promptTokenCount}, output=${usage.candidatesTokenCount}`
-    )
-
-    return data.candidates[0].content.parts[0].text
+  return data.choices[0].message.content
 }
 
-// ─── Main Logic ───────────────────────────────────────────────────────────────
+// ─── GitHub Actions log formatting ───────────────────────────────────────────
+
+function logGroup(title: string, content: string) {
+  if (process.env.CI) {
+    console.log(`::group::AI Analysis: ${title}`)
+    console.log(content)
+    console.log('::endgroup::')
+  } else {
+    console.log(`\n${'─'.repeat(60)}`)
+    console.log(`AI Analysis: ${title}`)
+    console.log('─'.repeat(60))
+    console.log(content)
+  }
+}
+
+function logError(message: string) {
+  process.env.CI
+    ? console.log(`::error::${message}`)
+    : console.error(`ERROR: ${message}`)
+}
+
+function logNotice(message: string) {
+  process.env.CI
+    ? console.log(`::notice::${message}`)
+    : console.log(`INFO: ${message}`)
+}
+
+// ─── Save summary for Telegram and GitHub Step Summary ───────────────────────
+
+function saveSummary(results: AnalysisResult[]) {
+  const summaryPath = path.join(process.cwd(), 'ai-analysis-summary.md')
+
+  const lines: string[] = [
+    '## AI Analysis of Failed Tests',
+    '',
+    `Total failures analyzed: **${results.length}**`,
+    '',
+  ]
+
+  for (const result of results) {
+    lines.push(`### FAILED: ${result.testName}`)
+    lines.push('')
+    if (result.error) {
+      lines.push(`_Analysis failed: ${result.error}_`)
+    } else {
+      lines.push(result.analysis)
+    }
+    lines.push('')
+    lines.push('---')
+    lines.push('')
+  }
+
+  fs.writeFileSync(summaryPath, lines.join('\n'), 'utf-8')
+  console.log(`\nSummary saved: ${summaryPath}`)
+
+  const githubStepSummary = process.env.GITHUB_STEP_SUMMARY
+  if (githubStepSummary) {
+    fs.appendFileSync(githubStepSummary, lines.join('\n'))
+    console.log('GitHub Step Summary updated')
+  }
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-    console.log('🔍 Searching for failed tests in test-results/...\n')
+  console.log('Analyzing failed tests...\n')
 
-    const failures = collectFailures()
+  const failures = collectFailures()
 
-    console.log(`❌ Failed tests found: ${failures.length}`)
-    failures.forEach((f, i) => console.log(`  ${i + 1}. ${f.testName}`))
+  if (failures.length === 0) {
+    logNotice('No failed tests found')
+    process.exit(0)
+  }
 
-    for (let i = 0; i < failures.length; i++) {
-        const failure = failures[i]
-        
-        console.log(`\n${'─'.repeat(60)}`)
-        console.log(`🧪 Test: ${failure.testName}`)
-        console.log(`📁 File: ${failure.filePath}`)
-        console.log('─'.repeat(60))
-        console.log('🤖 Sending to Gemini...')
+  console.log(`Failed tests: ${failures.length}`)
+  failures.forEach((f, i) => console.log(`  ${i + 1}. ${f.testName}`))
+  console.log()
 
-        try {
-            const analysis = await analyzeWithGemini(failure)
-            console.log('\n' + analysis)
-        } catch (err) {
-            console.error(`\n❌ Analysis failed: ${err}`)
-        }
+  const results: AnalysisResult[] = []
 
-        // 5-second delay between requests to avoid rate limiting (429 errors)
-        if (failures.length > 1 && i < failures.length - 1) {
-            console.log('\n⏳ Waiting 5 seconds before next request...');
-            await new Promise(resolve => setTimeout(resolve, 5000))
-        }
+  for (const failure of failures) {
+    console.log(`\nAnalyzing: ${failure.testName}`)
+
+    try {
+      const analysis = await analyzeWithGroq(failure)
+      logGroup(failure.testName, analysis)
+      results.push({ testName: failure.testName, analysis })
+    } catch (err) {
+      const errorMsg = String(err)
+      logError(`Analysis failed for "${failure.testName}": ${errorMsg}`)
+      results.push({ testName: failure.testName, analysis: '', error: errorMsg })
     }
 
-    console.log(`\n${'─'.repeat(60)}`)
-    console.log('✅ Analysis complete')
+    if (failures.indexOf(failure) < failures.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+  }
+
+  saveSummary(results)
+  console.log('\nAnalysis complete')
 }
 
 main().catch(err => {
-    console.error('Fatal error:', err)
-    process.exit(1)
+  logError(`Fatal: ${err}`)
+  process.exit(1)
 })
