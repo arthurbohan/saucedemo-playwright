@@ -58,7 +58,7 @@ test.describe('Login page', () => {
 
             await page.goBack()
             await expect(loginPage.usernameInput).toHaveValue('')
-            await expect(loginPage.passwordInput).toHaveValue('1')
+            await expect(loginPage.passwordInput).toHaveValue('')
         })
 
     })
