@@ -56,7 +56,7 @@ jobs:
       # Results appear as a collapsible group in GitHub Actions logs
       - name: AI Analysis of failures
         if: failure()
-        run: npx ts-node scripts/analyze-failure.ts
+        run: npx tsx scripts/analyze-failure.ts
         env:
           CI: true
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -120,7 +120,7 @@ jobs:
 
       - name: AI Analysis of failures
         if: failure()
-        run: npx ts-node scripts/analyze-failure.ts
+        run: npx tsx scripts/analyze-failure.ts
         env:
           CI: true
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
