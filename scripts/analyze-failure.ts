@@ -62,8 +62,15 @@ function collectFailures(): FailureInfo[] {
       if (fs.statSync(full).isDirectory()) {
         scan(full)
       } else if (file === 'error-context.md') {
+        const parentDirName = path.basename(path.dirname(full))
+
+        if (parentDirName.includes('-retry')) {
+          console.log(`Skipping retry analysis for: ${parentDirName}`)
+          continue
+        }
+
         const content  = fs.readFileSync(full, 'utf-8')
-        const testName = path.basename(path.dirname(full))
+        const testName = parentDirName
           .replace(/-chromium$/, '')
           .replace(/-/g, ' ')
           .trim()
