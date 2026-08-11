@@ -10,6 +10,7 @@
  */
 
 import { Page, Locator } from '@playwright/test'
+import 'dotenv/config'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
