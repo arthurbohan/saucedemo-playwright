@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test'
 import { BasePage } from './basePage'
+import { heal } from '../../helpers/selfhealing'
 
 export type ProductSlug =
     | 'sauce-labs-backpack'
@@ -105,5 +106,33 @@ export class InventoryPage extends BasePage {
         await this.openBurgerMenu()
         await this.page.getByTestId('logout-sidebar-link').click()
         await this.page.waitForURL('/')
+    }
+
+    async addToCartHealed(slug: ProductSlug) {
+        const original = this.addToCartBtn(slug)
+
+        // Product name for the AI description (slug → readable name)
+        const name = slug
+            .split('-')
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ')
+
+        const { locator, healed, newSelector } = await heal(
+            this.page,
+            original,
+            `Add to cart button for ${name}`,
+        )
+
+        await locator.click()
+
+        // If healing happened, log it prominently so the dev can fix the POM
+        if (healed) {
+            console.warn(
+                `\n🔧 [InventoryPage.addToCartHealed]\n` +
+                `   Slug:         ${slug}\n` +
+                `   Healed to:    ${newSelector}\n` +
+                `   Action:       Update addToCartBtn() in InventoryPage.ts\n`
+            )
+        }
     }
 }

@@ -1,7 +1,7 @@
 import { Page, Locator } from '@playwright/test'
 
 export abstract class BasePage {
-  constructor(protected page: Page) {}
+  constructor(public readonly page: Page) {}
 
   // Every subclass must implement the goto() method.
   abstract goto(): Promise<void>
