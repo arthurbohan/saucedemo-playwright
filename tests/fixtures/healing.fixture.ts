@@ -18,7 +18,7 @@
  */
 
 import { test as base, Page, Locator } from '@playwright/test'
-import { heal as healFn }              from '../../helpers/selfhealing'
+import { heal as healFn }              from '../../helpers/selfHealing/core'
 
 // ─── Fixture type ─────────────────────────────────────────────────────────────
 
