@@ -51,6 +51,7 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_SKIP_BROWSER_GC: 1
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
       # Runs only when tests fail — analyzes root cause via Groq API
       # Results appear as a collapsible group in GitHub Actions logs
