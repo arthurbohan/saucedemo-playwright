@@ -1,6 +1,6 @@
 import { Page } from '@playwright/test'
 import { BasePage } from './basePage'
-import { heal } from '../../helpers/selfhealing'
+import { heal } from '../../helpers/selfHealing/core'
 
 export type ProductSlug =
     | 'sauce-labs-backpack'
