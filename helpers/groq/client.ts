@@ -2,9 +2,6 @@
  * Groq API client
  */
 
-// Minimal ambient for `process.env` so this file typechecks without @types/node
-declare const process: { env: { [key: string]: string | undefined } }
-
 import type { GroqRequest, GroqResponse, GroqOptions, GroqMessage } from './types'
 import 'dotenv/config' 
 
