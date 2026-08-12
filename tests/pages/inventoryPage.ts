@@ -1,6 +1,5 @@
 import { Page } from '@playwright/test'
 import { BasePage } from './basePage'
-import { heal } from '../../helpers/selfHealing/core'
 
 export type ProductSlug =
     | 'sauce-labs-backpack'
@@ -12,41 +11,39 @@ export type ProductSlug =
 
 export type SortOption = 'az' | 'za' | 'lohi' | 'hilo'
 
+const SLUG_NAMES: Record<ProductSlug, string> = {
+    'sauce-labs-backpack': 'Sauce Labs Backpack',
+    'sauce-labs-bike-light': 'Sauce Labs Bike Light',
+    'sauce-labs-bolt-t-shirt': 'Sauce Labs Bolt T-Shirt',
+    'sauce-labs-fleece-jacket': 'Sauce Labs Fleece Jacket',
+    'sauce-labs-onesie': 'Sauce Labs Onesie',
+    'test.allthethings()-t-shirt-(red)': 'Test AllTheThings T-Shirt (Red)',
+}
+
+const SORT_LABELS: Record<SortOption, string> = {
+    az: 'Name (A to Z)',
+    za: 'Name (Z to A)',
+    lohi: 'Price (low to high)',
+    hilo: 'Price (high to low)',
+}
+
 export class InventoryPage extends BasePage {
     constructor(page: Page) {
         super(page)
     }
 
-    get inventoryList() {
-        return this.page.locator('.inventory_list')
-    }
-    get inventoryItems() {
-        return this.page.locator('.inventory_item')
-    }
-    get itemNames() {
-        return this.page.locator('.inventory_item_name')
-    }
-    get itemPrices() {
-        return this.page.locator('.inventory_item_price')
-    }
-    get cartBadge() {
-        return this.page.locator('.shopping_cart_badge')
-    }
-    get cartIcon() {
-        return this.page.locator('.shopping_cart_link')
-    }
-    get sortDropdown() {
-        return this.page.getByTestId('product-sort-container')
-    }
-    get pageTitle() {
-        return this.page.locator('.title')
-    }
-    get burgerMenu() {
-        return this.page.locator('#react-burger-menu-btn')
-    }
-    get openedBurgerMenu() {
-        return this.page.locator('.bm-menu-wrap')
-    }
+    // ── Locators ──────────────────────────────────────────────────
+
+    get inventoryList() { return this.page.locator('.inventory_list') }
+    get inventoryItems() { return this.page.locator('.inventory_item') }
+    get itemNames() { return this.page.locator('.inventory_item_name') }
+    get itemPrices() { return this.page.locator('.inventory_item_price') }
+    get cartBadge() { return this.page.locator('.shopping_cart_badge') }
+    get cartIcon() { return this.page.locator('.shopping_cart_link') }
+    get sortDropdown() { return this.page.getByTestId('product-sort-container') }
+    get pageTitle() { return this.page.locator('.title') }
+    get burgerMenu() { return this.page.locator('#react-burger-menu-btn') }
+    get openedBurgerMenu() { return this.page.locator('.bm-menu-wrap') }
 
     addToCartBtn(slug: ProductSlug) {
         return this.page.getByTestId(`add-to-cart-${slug}`)
@@ -59,6 +56,8 @@ export class InventoryPage extends BasePage {
     itemByName(name: string) {
         return this.page.locator('.inventory_item').filter({ hasText: name })
     }
+
+    // ── Standard methods ──────────────────────────────────────────
 
     async goto() {
         await this.page.goto('/inventory.html')
@@ -92,14 +91,13 @@ export class InventoryPage extends BasePage {
     }
 
     async getCartCount(): Promise<number> {
-        const badge = this.cartBadge
-        if (!await badge.isVisible()) return 0
-        return parseInt(await badge.innerText())
+        if (!await this.cartBadge.isVisible()) return 0
+        return parseInt(await this.cartBadge.innerText())
     }
 
     async openBurgerMenu() {
         await this.burgerMenu.click()
-        await this.page.locator('.bm-menu-wrap').waitFor({ state: 'visible' })
+        await this.openedBurgerMenu.waitFor({ state: 'visible' })
     }
 
     async logout() {
@@ -108,31 +106,35 @@ export class InventoryPage extends BasePage {
         await this.page.waitForURL('/')
     }
 
+    // ── Self-healing methods — use BasePage wrappers ──────────────
+
     async addToCartHealed(slug: ProductSlug) {
-        const original = this.addToCartBtn(slug)
-
-        // Product name for the AI description (slug → readable name)
-        const name = slug
-            .split('-')
-            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(' ')
-
-        const { locator, healed, newSelector } = await heal(
-            this.page,
-            original,
-            `Add to cart button for ${name}`,
+        await this.clickHealed(
+            this.addToCartBtn(slug),
+            `Add to cart button for ${SLUG_NAMES[slug]}`,
         )
+    }
 
-        await locator.click()
+    async removeFromCartHealed(slug: ProductSlug) {
+        await this.clickHealed(
+            this.removeBtn(slug),
+            `Remove from cart button for ${SLUG_NAMES[slug]}`,
+        )
+    }
 
-        // If healing happened, log it prominently so the dev can fix the POM
-        if (healed) {
-            console.warn(
-                `\n🔧 [InventoryPage.addToCartHealed]\n` +
-                `   Slug:         ${slug}\n` +
-                `   Healed to:    ${newSelector}\n` +
-                `   Action:       Update addToCartBtn() in InventoryPage.ts\n`
-            )
-        }
+    async sortByHealed(option: SortOption) {
+        await this.selectOptionHealed(
+            this.sortDropdown,
+            option,
+            `Product sort dropdown — select "${SORT_LABELS[option]}"`,
+        )
+    }
+
+    async goToCartHealed() {
+        await this.clickHealed(
+            this.cartIcon,
+            'Shopping cart icon link in the top navigation bar',
+        )
+        await this.page.waitForURL('/cart.html')
     }
 }

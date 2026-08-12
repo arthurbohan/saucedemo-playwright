@@ -12,27 +12,17 @@ export class LoginPage extends BasePage {
         super(page)
     }
 
-    get usernameInput() {
-        return this.page.getByTestId('username')
-    }
-    get passwordInput() {
-        return this.page.getByTestId('password')
-    }
-    get loginButton() {
-        return this.page.getByTestId('login-button')
-    }
-    get errorMessage() {
-        return this.page.getByTestId('error')
-    }
-    get errorDismiss() {
-        return this.page.getByTestId('error-button')
-    }
-    get credentialsHint() {
-        return this.page.locator('#login_credentials')
-    }
-    get passwordHint() {
-        return this.page.locator('.login_password')
-    }
+    // ── Locators ──────────────────────────────────────────────────
+
+    get usernameInput() { return this.page.getByTestId('username') }
+    get passwordInput() { return this.page.getByTestId('password') }
+    get loginButton() { return this.page.getByTestId('login-button') }
+    get errorMessage() { return this.page.getByTestId('error') }
+    get errorDismiss() { return this.page.getByTestId('error-button') }
+    get credentialsHint() { return this.page.locator('#login_credentials') }
+    get passwordHint() { return this.page.locator('.login_password') }
+
+    // ── Standard methods ──────────────────────────────────────────
 
     async goto() {
         await this.page.goto('/')
@@ -45,7 +35,6 @@ export class LoginPage extends BasePage {
         await this.loginButton.click()
     }
 
-    // A convenient shortcut is loginAs('standard') instead of a long string.
     async loginAs(user: SauceUser) {
         await this.login(user, 'secret_sauce')
     }
@@ -61,5 +50,17 @@ export class LoginPage extends BasePage {
 
     async isErrorVisible(): Promise<boolean> {
         return this.errorMessage.isVisible()
+    }
+
+    // ── Self-healing methods — use BasePage wrappers ──────────────
+
+    async loginHealed(username: string, password: string) {
+        await this.fillHealed(this.usernameInput, username, 'Username input field')
+        await this.fillHealed(this.passwordInput, password, 'Password input field')
+        await this.clickHealed(this.loginButton, 'Login submit button')
+    }
+
+    async loginAsHealed(user: SauceUser) {
+        await this.loginHealed(user, 'secret_sauce')
     }
 }
