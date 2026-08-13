@@ -10,8 +10,11 @@
     "allure:gen": "allure generate allure-results --clean -o allure-report",
     "allure:open": "allure open allure-report",
     "allure:report": "npm run allure:gen && npm run allure:open",
-    "ai:analyze": "npx tsx helpers/scripts/analyzeFailure.ts",
-    "ai:generate": "npx tsx helpers/scripts/generateTests/generator.ts"
+    "ai:analyze": "npx tsx scripts/analyzeFailure.ts",
+    "ai:generate": "npx tsx scripts/generateTests.ts",
+    "ai:generate:login": "npx tsx scripts/generateTests.ts login",
+    "ai:generate:inventory": "npx tsx scripts/generateTests.ts inventory",
+    "ai:generate:checkout": "npx tsx scripts/generateTests.ts checkout"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",
@@ -20,7 +23,6 @@
     "allure-commandline": "^2.43.0",
     "allure-playwright": "^3.10.2",
     "dotenv": "^17.4.2",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.23.1"
+    "tsx": "^4.23.12"
   }
 }

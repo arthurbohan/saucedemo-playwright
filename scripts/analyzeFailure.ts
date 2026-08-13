@@ -10,11 +10,11 @@
 import fs from 'fs'
 import path from 'path'
 import 'dotenv/config'
-import { getGroqClient } from '../groq/client'
+import { getGroqClient } from '../helpers/groq/client'
 import {
     buildFailureAnalysisPrompt,
     buildBatchAnalysisPrompt
-} from '../groq/prompts'
+} from '../helpers/groq/prompts'
 
 type FailureInfo = {
     filePath: string

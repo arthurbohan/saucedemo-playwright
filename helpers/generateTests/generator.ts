@@ -5,7 +5,7 @@
  * Calls Groq with the feature prompt and returns the generated code.
  */
 
-import { getGroqClient }       from '../../groq/client'
+import { getGroqClient }       from '../groq/client'
 import { buildGeneratePrompt } from './prompt'
 import { FeatureKey }          from './types'
 

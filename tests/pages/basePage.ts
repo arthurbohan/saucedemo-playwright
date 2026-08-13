@@ -1,5 +1,5 @@
 import { Page, Locator } from '@playwright/test'
-import { heal } from '../../helpers/selfHealing/core'
+import { heal } from '../../helpers/selfHealing'
 
 export abstract class BasePage {
   constructor(public readonly page: Page) { }
