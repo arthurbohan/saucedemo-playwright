@@ -2,13 +2,13 @@ name: Playwright Tests
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 permissions:
   contents: read
-  pages:    write
+  pages: write
   id-token: write
 
 concurrency:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
 
-  # ─── JOB 1: E2E tests with sharding + Docker ─────────────────────────────────
+  # ─── JOB 1: E2E tests with sharding ──────────────────────────────────────────
 
   test-e2e:
     name: E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
@@ -47,19 +47,11 @@ jobs:
         run: npm ci
 
       - name: Run E2E tests
+        id: tests
         run: npx playwright test --project=sd-e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         env:
           CI: true
           PLAYWRIGHT_SKIP_BROWSER_GC: 1
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-
-      # Runs only when tests fail — analyzes root cause via Groq API
-      # Results appear as a collapsible group in GitHub Actions logs
-      - name: AI Analysis of failures
-        if: failure()
-        run: npx tsx scripts/analyzeFailure.ts
-        env:
-          CI: true
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
       - name: Upload blob report
@@ -78,14 +70,6 @@ jobs:
           path: allure-results/
           retention-days: 1
 
-      - name: Upload AI analysis summary
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: ai-analysis-shard-${{ matrix.shardIndex }}
-          path: ai-analysis-summary.md
-          retention-days: 7
-
       - name: Upload test artifacts on failure
         uses: actions/upload-artifact@v4
         if: failure()
@@ -97,7 +81,7 @@ jobs:
   # ─── JOB 2: API tests ────────────────────────────────────────────────────────
 
   test-api:
-    name: API Tests (jsonplaceholder)
+    name: API Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -115,24 +99,10 @@ jobs:
         run: npm ci
 
       - name: Run API tests
+        id: api-tests
         run: npm run test:api
         env:
           CI: true
-
-      - name: AI Analysis of failures
-        if: failure()
-        run: npx tsx scripts/analyzeFailure.ts
-        env:
-          CI: true
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-
-      - name: Upload AI analysis summary
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: ai-analysis-api
-          path: ai-analysis-summary.md
-          retention-days: 7
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
@@ -142,12 +112,66 @@ jobs:
           path: allure-results/
           retention-days: 1
 
-  # ─── JOB 3: Merge Playwright shard reports ───────────────────────────────────
+      - name: Upload test artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-artifacts-api
+          path: test-results/
+          retention-days: 7
+
+  # ─── JOB 3: AI Analysis (Single job for all failures) ───────────────────────
+
+  ai-analysis:
+    name: AI Analysis
+    runs-on: ubuntu-latest
+    needs: [test-e2e, test-api]
+    if: |
+      always() &&
+      (needs.test-e2e.result == 'failure' ||
+       needs.test-api.result == 'failure')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download all test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-artifacts-*
+          path: all-test-results/
+          merge-multiple: true
+
+      - name: Run AI Analysis
+        run: npx tsx scripts/analyzeFailure.ts
+        env:
+          CI: true
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_STEP_SUMMARY: true
+
+      - name: Upload AI analysis summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-analysis
+          path: ai-analysis-summary.md
+          retention-days: 14
+
+  # ─── JOB 4: Merge Playwright shard reports ──────────────────────────────────
 
   merge-reports:
     name: Merge E2E Reports
     runs-on: ubuntu-latest
-    needs: test-e2e
+    needs: [test-e2e]
     if: always()
 
     steps:
@@ -181,7 +205,7 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-  # ─── JOB 4: Publish Allure to GitHub Pages ───────────────────────────────────
+  # ─── JOB 5: Publish Allure to GitHub Pages ──────────────────────────────────
 
   publish-allure:
     name: Publish Allure Report
@@ -238,27 +262,26 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
-  # ─── JOB 5: Telegram notification with AI analysis ───────────────────────────
+  # ─── JOB 6: Telegram notification ────────────────────────────────────────────
 
   notify-telegram:
     name: Telegram Notification
     runs-on: ubuntu-latest
-    needs: [test-e2e, test-api, publish-allure]
+    needs: [test-e2e, test-api, publish-allure, ai-analysis]
     if: always()
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download AI analysis (if exists)
+      - name: Download AI analysis summary
         uses: actions/download-artifact@v4
         if: |
           needs.test-e2e.result == 'failure' ||
           needs.test-api.result == 'failure'
         with:
-          pattern: ai-analysis-*
+          name: ai-analysis
           path: ai-summaries/
-          merge-multiple: true
         continue-on-error: true
 
       - name: Send Telegram message
@@ -267,14 +290,14 @@ jobs:
           API_STATUS="${{ needs.test-api.result }}"
 
           if [[ "$E2E_STATUS" == "success" && "$API_STATUS" == "success" ]]; then
-            STATUS_ICON="PASSED"
-            STATUS_TEXT="All tests passed"
+            STATUS_ICON="✅ PASSED"
+            STATUS_TEXT="All tests passed successfully! 🎉"
           elif [[ "$E2E_STATUS" == "cancelled" || "$API_STATUS" == "cancelled" ]]; then
-            STATUS_ICON="CANCELLED"
+            STATUS_ICON="⏹️ CANCELLED"
             STATUS_TEXT="Run was cancelled"
           else
-            STATUS_ICON="FAILED"
-            STATUS_TEXT="Tests failed"
+            STATUS_ICON="❌ FAILED"
+            STATUS_TEXT="Some tests failed. Check details below."
           fi
 
           ALLURE_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
@@ -286,27 +309,27 @@ jobs:
             TRIGGER="Push to ${{ github.ref_name }}"
           fi
 
-          MESSAGE="*Playwright Tests — ${STATUS_ICON}*
+          MESSAGE="*${STATUS_ICON} Playwright Tests*
 
-          Status: ${STATUS_TEXT}
+          ${STATUS_TEXT}
           Trigger: ${TRIGGER}
-          Commit: ${{ github.sha }}
+          Commit: \`${{ github.sha }}\`
 
           E2E: ${E2E_STATUS}
           API: ${API_STATUS}
 
-          Allure Report: ${ALLURE_URL}
-          GitHub Actions: ${RUN_URL}"
+          📊 [Allure Report](${ALLURE_URL})
+          🔗 [GitHub Actions](${RUN_URL})"
 
-          # Append short AI analysis snippet if available
+          # Append AI analysis if available
           if [[ -f "ai-summaries/ai-analysis-summary.md" ]]; then
-            AI_SNIPPET=$(grep -v "^#\|^---\|^$" ai-summaries/ai-analysis-summary.md | head -5 | tr '\n' ' ')
+            AI_SNIPPET=$(grep -v "^#\|^---\|^$" ai-summaries/ai-analysis-summary.md | head -3 | tr '\n' ' ')
             if [[ -n "$AI_SNIPPET" ]]; then
               MESSAGE="${MESSAGE}
 
-          AI Analysis (brief):
-          ${AI_SNIPPET}
-          (full analysis available in GitHub Actions logs)"
+          🤖 *AI Analysis:*
+          ${AI_SNIPPET:0:150}...
+          (full analysis in GitHub Actions artifacts)"
             fi
           fi
 
@@ -318,3 +341,55 @@ jobs:
               \"parse_mode\": \"Markdown\",
               \"disable_web_page_preview\": false
             }"
+
+      - name: Send AI report as file
+        if: |
+          (needs.test-e2e.result == 'failure' || needs.test-api.result == 'failure') &&
+          hashFiles('ai-summaries/ai-analysis-summary.md') != ''
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument" \
+            -F "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -F "document=@ai-summaries/ai-analysis-summary.md" \
+            -F "caption=📄 AI Analysis Report" \
+            -F "parse_mode=Markdown"
+
+  # ─── JOB 7: Cleanup old artifacts ────────────────────────────────────────────
+
+  cleanup:
+    name: Cleanup Old Artifacts
+    runs-on: ubuntu-latest
+    needs: [notify-telegram]
+    if: always()
+
+    steps:
+      - name: Delete old artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: artifacts } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+
+            const now = Date.now();
+            const retentionDays = 7;
+            const cutoff = now - (retentionDays * 24 * 60 * 60 * 1000);
+
+            for (const artifact of artifacts.artifacts) {
+              // Keep AI reports and test artifacts longer
+              if (artifact.name.startsWith('ai-analysis') || 
+                  artifact.name.startsWith('test-artifacts')) {
+                continue;
+              }
+
+              const created = new Date(artifact.created_at).getTime();
+              if (created < cutoff) {
+                console.log(`🗑️ Deleting old artifact: ${artifact.name}`);
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                });
+              }
+            }

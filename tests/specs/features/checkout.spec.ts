@@ -11,7 +11,7 @@ test.describe('Checkout flow', () => {
 
         test('empty firstName shows error', async ({ checkoutPage }) => {
             await checkoutPage.continueButton.click()
-            await expect(checkoutPage.errorMessage).toContainText('First Name is required')
+            await expect(checkoutPage.errorMessage).toContainText('First Name is required1')
         })
 
         test('empty lastName shows error', async ({ checkoutPage }) => {
