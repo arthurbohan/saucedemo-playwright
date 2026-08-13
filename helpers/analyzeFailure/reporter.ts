@@ -62,17 +62,17 @@ export class Reporter {
         lines.push('')
 
         for (const result of results) {
-            lines.push(`### ❌ ${result.testName}`)
+            // Escape special characters in test name for Markdown
+            const escapedTestName = this.escapeMarkdown(result.testName)
+            
+            lines.push(`### ❌ ${escapedTestName}`)
             lines.push('')
             
             if (result.error) {
                 lines.push(`**⚠️ Analysis failed:** ${result.error}`)
             } else {
-                // Clean up the analysis - remove extra empty lines
-                const cleanAnalysis = result.analysis
-                    .split('\n')
-                    .filter(line => line.trim() !== '' || line.includes('##'))
-                    .join('\n')
+                // Clean up the analysis
+                const cleanAnalysis = this.cleanAnalysis(result.analysis)
                 lines.push(cleanAnalysis)
             }
             
@@ -85,12 +85,59 @@ export class Reporter {
     }
 
     /**
+     * Escape special characters in test names for Markdown
+     */
+    private escapeMarkdown(text: string): string {
+        // Escape special Markdown characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
+        return text
+            .replace(/\\/g, '\\\\')
+            .replace(/\*/g, '\\*')
+            .replace(/_/g, '\\_')
+            .replace(/\[/g, '\\[')
+            .replace(/\]/g, '\\]')
+            .replace(/\(/g, '\\(')
+            .replace(/\)/g, '\\)')
+            .replace(/~/g, '\\~')
+            .replace(/`/g, '\\`')
+            .replace(/>/g, '\\>')
+            .replace(/#/g, '\\#')
+            .replace(/\+/g, '\\+')
+            .replace(/-/g, '\\-')
+            .replace(/=/g, '\\=')
+            .replace(/\|/g, '\\|')
+            .replace(/\{/g, '\\{')
+            .replace(/\}/g, '\\}')
+            .replace(/\./g, '\\.')
+            .replace(/!/g, '\\!')
+    }
+
+    /**
+     * Clean up analysis text
+     */
+    private cleanAnalysis(analysis: string): string {
+        // Remove excessive empty lines
+        const cleaned = analysis
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line !== '')
+            .join('\n')
+
+        // If analysis is too long, truncate with proper formatting
+        if (cleaned.length > 5000) {
+            return cleaned.slice(0, 5000) + '\n\n... (analysis truncated)'
+        }
+
+        return cleaned
+    }
+
+    /**
      * Update GitHub Step Summary
      */
     private updateGitHubStepSummary(content: string): void {
         const githubStepSummary = process.env.GITHUB_STEP_SUMMARY
         if (githubStepSummary) {
             try {
+                // For GitHub Step Summary, we want to show it nicely
                 fs.appendFileSync(githubStepSummary, content)
                 this.logger.info('GitHub Step Summary updated')
             } catch (error) {

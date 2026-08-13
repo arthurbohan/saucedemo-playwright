@@ -295,8 +295,8 @@ jobs:
           E2E: ${E2E_STATUS}
           API: ${API_STATUS}
 
-          Allure Report: ${ALLURE_URL}
-          GitHub Actions: ${RUN_URL}"
+          📊 [Allure Report](${ALLURE_URL})
+          🔗 [GitHub Actions](${RUN_URL})"
 
           # Append short AI analysis snippet if available
           if [[ -f "ai-summaries/ai-analysis-summary.md" ]]; then
