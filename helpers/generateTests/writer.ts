@@ -8,6 +8,10 @@
 import fs   from 'fs'
 import path from 'path'
 
+// Flat on purpose: generated specs live at the same depth as
+// tests/specs/features/*.spec.ts so the AI's '../../xxx' imports resolve
+// correctly. UI vs API is distinguished by filename (api.generated.spec.ts)
+// via testMatch in the two playwright.config.ts *-generated projects.
 const OUTPUT_DIR = path.join(process.cwd(), 'tests', 'specs', 'generated')
 
 export function saveGeneratedSpec(feature: string, code: string): string {

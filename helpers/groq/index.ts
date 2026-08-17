@@ -21,6 +21,7 @@ export type {
 export * from './prompts/failureAnalysis'
 export * from './prompts/selfHealing'
 export * from './prompts/riskAnalysis'
+export * from './prompts/generateTests'
 
 // Default export
 export default {

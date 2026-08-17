@@ -4,5 +4,6 @@ export { InventoryPage } from './inventoryPage'
 export { CartPage } from './cartPage'
 export { CheckoutPage } from './checkoutPage'
 
+export type { SauceUser } from './loginPage'
 export type { ProductSlug, SortOption } from './inventoryPage'
 export type { ShippingInfo } from './checkoutPage'

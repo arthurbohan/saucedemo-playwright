@@ -86,4 +86,36 @@ export const FEATURE_DESCRIPTIONS: Record<FeatureKey, string> = {
       - .complete-text
       - data-test="back-to-products" → return to catalog
   `,
+
+  api: `
+    REST API tests against jsonplaceholder.typicode.com (via the apiClient fixture).
+
+    Resources and counts:
+      - posts    → 100 items (userId 1-10)
+      - comments → 500 items (postId 1-100), nested under posts/:id/comments
+      - users    → 10 items
+      - todos    → 200 items (userId 1-10), have a boolean "completed" field
+      - albums   → 100 items (userId 1-10)
+
+    All HTTP methods supported: GET, POST, PUT, PATCH, DELETE.
+    Write operations (POST/PUT/PATCH/DELETE) are SIMULATED by the server —
+    nothing is actually persisted, but it returns realistic statuses/bodies:
+      - POST   → 201, echoes the payload back, new resource gets id 101
+      - PUT    → 200, echoes the payload back (full replace)
+      - PATCH  → 200, echoes only the patched fields merged into the existing resource
+      - DELETE → 200, empty object body {}
+      - GET a non-existent id (e.g. posts/9999) → 404
+
+    ⚠️ id 101 (and any id above the real range) does NOT actually exist server-side
+    — it's only echoed back by POST. Calling PUT/PATCH/DELETE against it (e.g.
+    \`apiClient.put('posts/101', ...)\` using the id from a just-created post)
+    returns 500, not 200. In a create → update → delete chain, run the create
+    step for its own sake, but do the update/delete steps against a real,
+    pre-existing id (e.g. posts/1) — never against the id the create step returned.
+
+    Cover: happy path per resource, filtering by query param (e.g.
+    posts?userId=1, todos?completed=true), a nested route (posts/:id/comments),
+    a 404 case, and a multi-step chain (create → get → update → delete, or
+    get user → their posts → comments on the first post).
+  `,
 }

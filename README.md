@@ -14,6 +14,7 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 - [Getting Started](#-getting-started)
 - [Running Tests](#-running-tests)
 - [AI Failure Analysis](#-ai-failure-analysis)
+- [AI Test Generation](#-ai-test-generation)
 - [Risk Analysis & Impact-Based Test Selection](#-risk-analysis--impact-based-test-selection)
 - [CI/CD](#-cicd)
 - [Reporting](#-reporting)
@@ -79,11 +80,11 @@ project/
 │           └── api.spec.ts
 │
 ├── helpers/                         ← Logic behind scripts/ (one module = one responsibility)
-│   ├── groq/                           Groq API client + all prompts
+│   ├── groq/                           Groq API client + every prompt builder
 │   │   ├── client.ts
-│   │   └── prompts/                    failureAnalysis · selfHealing · riskAnalysis
+│   │   └── prompts/                    failureAnalysis · selfHealing · riskAnalysis · generateTests
 │   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report
-│   ├── generateTests/                  Feature description → generated spec file
+│   ├── generateTests/                  Feature description → generated spec file (prompt lives in groq/prompts/)
 │   ├── selfHealing/                    Locator failed → AI picks alternative from DOM snapshot
 │   ├── riskAnalysis/                   Diff + impacted specs → Groq risk report
 │   ├── testSelection/                  Static import graph → impacted specs (no AI)
@@ -261,6 +262,41 @@ in GitHub Actions logs:
   await expect(checkoutPage.finishButton).toBeVisible()
   await checkoutPage.finish()
 ```
+
+---
+
+## ✨ AI Test Generation
+
+Groq generates a first-draft spec file from a feature description
+(`helpers/generateTests/features.ts`). Covers both domains — UI (Page Object
+driven) and API (jsonplaceholder) — each with its own prompt context, since
+the two need completely different rules (locators/fixtures vs. HTTP client/
+response shapes).
+
+```bash
+npm run ai:generate              # all features (login, inventory, checkout, api)
+npm run ai:generate:login
+npm run ai:generate:inventory
+npm run ai:generate:checkout
+npm run ai:generate:api
+```
+
+Output goes to `tests/specs/generated/` — reviewed and run there, separately
+from the maintained suite, via two dedicated Playwright projects (not part of
+`npm test`):
+
+```bash
+npm run test:generated           # UI specs (sd-e2e-generated project)
+npm run test:generated:api       # API specs (jp-api-generated project)
+```
+
+Treat the output as a draft, not a finished test: it's a fast starting point
+for a brand-new feature, or for one targeted test off a `ai-risk-analysis.md`
+coverage gap — not a replacement for a hand-designed spec. In this repo the
+hand-written `checkout.spec.ts` / `login.spec.ts` are still the reference
+quality bar (e.g. they deliberately exercise both the healed and non-healed
+path of every interaction, which a generated first draft won't think to do
+without being told).
 
 ---
 
@@ -446,6 +482,8 @@ Write operations are simulated — data is not persisted.
 npm test                      # all projects
 npm run test:e2e              # UI tests only
 npm run test:api              # API tests only
+npm run test:generated        # generated UI specs (review before promoting)
+npm run test:generated:api    # generated API specs (review before promoting)
 
 # Reports
 npm run report:pw             # open Playwright HTML report
@@ -457,5 +495,6 @@ npm run allure:report         # generate + open
 npm run ai:analyze            # analyze latest test failures via Groq
 npm run ai:risk                # pre-merge risk analysis of the current diff
 npm run ai:select              # impact-based test selection (deterministic)
-npm run ai:generate            # generate spec files from feature descriptions
+npm run ai:generate            # generate spec files for all features (login, inventory, checkout, api)
+npm run ai:generate:api        # generate spec file for the API suite only
 ```

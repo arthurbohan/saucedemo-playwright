@@ -6,6 +6,8 @@
     "test": "playwright test",
     "test:e2e": "playwright test --project=sd-e2e",
     "test:api": "playwright test --project=jp-api",
+    "test:generated": "playwright test --project=sd-e2e-generated",
+    "test:generated:api": "playwright test --project=jp-api-generated",
     "report:pw": "playwright show-report",
     "allure:gen": "allure generate allure-results --clean -o allure-report",
     "allure:open": "allure open allure-report",
@@ -16,6 +18,7 @@
     "ai:generate:login": "npx tsx scripts/generateTests.ts login",
     "ai:generate:inventory": "npx tsx scripts/generateTests.ts inventory",
     "ai:generate:checkout": "npx tsx scripts/generateTests.ts checkout",
+    "ai:generate:api": "npx tsx scripts/generateTests.ts api",
     "ai:risk": "npx tsx scripts/analyzeRisk.ts",
     "ai:select": "npx tsx scripts/selectTests.ts"
   },

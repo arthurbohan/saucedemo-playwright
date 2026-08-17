@@ -23,3 +23,9 @@ export {
     buildRiskAnalysisPrompt,
 } from './riskAnalysis'
 export type { RiskAnalysisPromptInput } from './riskAnalysis'
+
+// Test generation prompts
+export {
+    GENERATE_TESTS_SYSTEM,
+    buildGeneratePrompt,
+} from './generateTests'
