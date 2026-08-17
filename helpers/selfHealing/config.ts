@@ -7,6 +7,12 @@ export const CONFIG = {
     DEFAULT_MAX_RETRIES: 2,
     SNAPSHOT_MAX_LENGTH: 6000,
     INTERACTIVE_ELEMENTS_LIMIT: 30,
+    // Deliberately NOT the same model as analyzeFailure/analyzeRisk/generateTests
+    // (openai/gpt-oss-120b) — Groq's 8000 TPM cap is per-model, so a live test
+    // run's self-healing calls get their own budget instead of competing with
+    // CLI scripts that might run around the same time (e.g. analyzeFailure
+    // right after a failed run). 20b is plenty for picking one CSS selector.
+    GROQ_MODEL: 'openai/gpt-oss-20b',
 } as const
 
 export const VALID_ROLES = [

@@ -21,11 +21,11 @@ A test is trying to find this element: "${description}"
 
 The original locator no longer works.
 
-Page snapshot:
-${snapshot.slice(0, 6000)}
-
-Interactive elements on page:
+Interactive elements on page (has the data-test/data-testid/aria-label values you need):
 ${interactiveElements}
+
+Page snapshot (for layout context only — the element's selector attributes are in the list above):
+${snapshot.slice(0, 2000)}
 
 Based on the above information, provide a single Playwright locator that would find this element.
 

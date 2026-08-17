@@ -71,7 +71,16 @@ export async function heal(
             const response = await groqClient.ask(
                 prompt,
                 'You are a Playwright locator expert. Return only the selector. No explanation.',
-                { maxTokens: 150, temperature: 0.1 }
+                {
+                    maxTokens: 300,
+                    temperature: 0.1,
+                    // own model + own TPM budget, separate from the CLI scripts — see CONFIG.GROQ_MODEL
+                    model: CONFIG.GROQ_MODEL,
+                    // this runs inside a live Playwright test (~30s timeout) — a 429
+                    // here should fail straight to the local fallback selector below,
+                    // not burn the test's time budget waiting on Groq
+                    retryAttempts: 1,
+                }
             )
 
             const sanitized = sanitizeSelector(response.trim())
@@ -96,8 +105,11 @@ export async function heal(
                 }
             }
         } catch (error) {
+            // Don't throw here — a Groq error (network blip, rate limit) should
+            // degrade to the fallback selector below, same as an invalid
+            // selector does. heal() only gives up (returns healed: false) once
+            // every option, including the fallback, is exhausted.
             console.warn(`   ❌ Groq API error (attempt ${attempts}/${maxRetries}): ${error}`)
-            if (attempts >= maxRetries) throw error
         }
     }
 

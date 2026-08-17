@@ -16,8 +16,28 @@ export async function generateFallbackSelector(
         const productName = productMatch[1].trim()
         console.warn(`   📦 Extracted product: "${productName}"`)
 
+        // A bare text match usually lands on the item's NAME (a non-interactive
+        // label), not the actual button — clicking it does nothing. When the
+        // description is asking for a button, look for one sharing the closest
+        // card/container with that text before falling back to the text itself.
+        if (/button/i.test(description)) {
+            for (let depth = 1; depth <= 4; depth++) {
+                const candidate = `(//*[normalize-space(text())="${productName}"]/ancestor::*[${depth}]//button)[1]`
+                try {
+                    const count = await page.locator(candidate).count()
+                    if (count > 0) {
+                        console.warn(`   ✅ Found button near "${productName}" (ancestor depth ${depth}): ${candidate}`)
+                        return candidate
+                    }
+                } catch {
+                    // Continue
+                }
+            }
+        }
+
         const fallbacks = [
             `button[aria-label*="${productName}"]`,
+            `[data-test*="${productName.toLowerCase().replace(/\s+/g, '-')}"]`,
             `[data-testid*="${productName.toLowerCase().replace(/\s+/g, '-')}"]`,
             `text="${productName}"`,
             `text=/.*${productName}.*/i`,
