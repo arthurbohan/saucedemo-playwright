@@ -15,7 +15,9 @@
     "ai:generate": "npx tsx scripts/generateTests.ts",
     "ai:generate:login": "npx tsx scripts/generateTests.ts login",
     "ai:generate:inventory": "npx tsx scripts/generateTests.ts inventory",
-    "ai:generate:checkout": "npx tsx scripts/generateTests.ts checkout"
+    "ai:generate:checkout": "npx tsx scripts/generateTests.ts checkout",
+    "ai:risk": "npx tsx scripts/analyzeRisk.ts",
+    "ai:select": "npx tsx scripts/selectTests.ts"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",

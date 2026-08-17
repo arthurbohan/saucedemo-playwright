@@ -6,7 +6,8 @@ import type { GroqRequest, GroqResponse, GroqOptions, GroqMessage } from './type
 import 'dotenv/config' 
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile'
+// llama-3.3-70b-versatile was retired from Groq's catalog — see console.groq.com/docs/models
+const DEFAULT_MODEL = 'openai/gpt-oss-120b'
 
 export class GroqClient {
     private apiKey: string

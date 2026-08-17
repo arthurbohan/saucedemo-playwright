@@ -20,6 +20,7 @@ export type {
 // Prompts (explicit exports)
 export * from './prompts/failureAnalysis'
 export * from './prompts/selfHealing'
+export * from './prompts/riskAnalysis'
 
 // Default export
 export default {

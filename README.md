@@ -13,6 +13,8 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 - [Architecture Principles](#-architecture-principles)
 - [Getting Started](#-getting-started)
 - [Running Tests](#-running-tests)
+- [AI Failure Analysis](#-ai-failure-analysis)
+- [Risk Analysis & Impact-Based Test Selection](#-risk-analysis--impact-based-test-selection)
 - [CI/CD](#-cicd)
 - [Reporting](#-reporting)
 - [Test Users](#-test-users-saucedemo)
@@ -39,44 +41,62 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 ```
 project/
 │
-├── pages/                          ← Page Objects (one class = one file)
-│   ├── BasePage.ts                    Abstract base: goto(), waitForPageLoad(), getTextOf()
-│   ├── LoginPage.ts                   Login form
-│   ├── InventoryPage.ts               Product catalog
-│   ├── CartPage.ts                    Shopping cart
-│   ├── CheckoutPage.ts                Checkout flow (3 steps)
-│   └── index.ts                       Barrel export
+├── tests/
+│   ├── pages/                       ← Page Objects (one class = one file)
+│   │   ├── basePage.ts                 Abstract base: goto(), waitForPageLoad(), getTextOf()
+│   │   ├── loginPage.ts                Login form
+│   │   ├── inventoryPage.ts            Product catalog
+│   │   ├── cartPage.ts                 Shopping cart
+│   │   ├── checkoutPage.ts             Checkout flow (3 steps)
+│   │   └── index.ts                    Barrel export
+│   │
+│   ├── fixtures/                    ← Fixtures (one file = one responsibility)
+│   │   ├── auth.fixture.ts             standardPage, problemPage via localStorage
+│   │   ├── api.fixture.ts              APIRequestContext for jsonplaceholder.typicode.com
+│   │   ├── pages.fixture.ts            Page Objects as fixtures (depends on auth)
+│   │   ├── healing.fixture.ts          Self-healing heal() fixture (Groq)
+│   │   └── index.ts                    mergeTests → export { test, expect }
+│   │
+│   ├── builders/                    ← Data Builders (faker under the hood)
+│   │   ├── shippingInfo.builder.ts     Checkout form data with fluent API
+│   │   ├── post.builder.ts             /posts endpoint request data
+│   │   └── index.ts                    Barrel export
+│   │
+│   ├── types/                       ← TypeScript types
+│   │   └── api.types.ts                Post, Comment, User, Todo
+│   │
+│   ├── .auth/                       ← storageState files (.gitignore)
+│   │
+│   └── specs/                       ← Tests organized by feature
+│       ├── auth.setup.ts               Global setup — saves storageState to .auth/
+│       ├── features/                   UI tests (project: sd-e2e)
+│       │   ├── login.spec.ts
+│       │   ├── inventory.spec.ts
+│       │   ├── inventory.healing.spec.ts  Self-healing locator demo
+│       │   ├── cart.spec.ts
+│       │   └── checkout.spec.ts
+│       └── api/                        API tests (project: jp-api)
+│           └── api.spec.ts
 │
-├── fixtures/                       ← Fixtures (one file = one responsibility)
-│   ├── auth.fixture.ts                standardPage, problemPage via localStorage
-│   ├── api.fixture.ts                 APIRequestContext for jsonplaceholder.typicode.com
-│   ├── pages.fixture.ts               Page Objects as fixtures (depends on auth)
-│   └── index.ts                       mergeTests → export { test, expect }
+├── helpers/                         ← Logic behind scripts/ (one module = one responsibility)
+│   ├── groq/                           Groq API client + all prompts
+│   │   ├── client.ts
+│   │   └── prompts/                    failureAnalysis · selfHealing · riskAnalysis
+│   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report
+│   ├── generateTests/                  Feature description → generated spec file
+│   ├── selfHealing/                    Locator failed → AI picks alternative from DOM snapshot
+│   ├── riskAnalysis/                   Diff + impacted specs → Groq risk report
+│   ├── testSelection/                  Static import graph → impacted specs (no AI)
+│   └── git/                            git diff helper shared by risk/selection scripts
 │
-├── builders/                       ← Data Builders (faker under the hood)
-│   ├── ShippingInfoBuilder.ts         Checkout form data with fluent API
-│   ├── PostBuilder.ts                 /posts endpoint request data
-│   └── index.ts                       Barrel export
+├── scripts/                         ← CLI entry points (thin wrappers around helpers/)
+│   ├── analyzeFailure.ts               AI root-cause analysis of failed tests (ai:analyze)
+│   ├── generateTests.ts                AI test-case generation (ai:generate)
+│   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
+│   └── selectTests.ts                  Impact-based regression selection (ai:select)
 │
-├── types/                          ← TypeScript types
-│   └── api.types.ts                   Post, Comment, User, Todo
-│
-├── specs/                          ← Tests organized by feature
-│   ├── auth.setup.ts                  Global setup — saves storageState to .auth/
-│   ├── features/                      UI tests (project: sd-e2e)
-│   │   ├── login.spec.ts
-│   │   ├── inventory.spec.ts
-│   │   ├── cart.spec.ts
-│   │   └── checkout.spec.ts
-│   └── api/                           API tests (project: jp-api)
-│       └── api.spec.ts
-│
-├── scripts/
-│   └── analyze-failure.ts          ← AI failure analysis via Groq API
-│
-├── .auth/                          ← storageState files (.gitignore)
 ├── .github/workflows/
-│   └── playwright.yml              ← CI/CD pipeline
+│   └── playwright.yml               ← CI/CD pipeline
 ├── playwright.config.ts
 ├── package.json
 └── .gitignore
@@ -244,6 +264,56 @@ in GitHub Actions logs:
 
 ---
 
+## 🎯 Risk Analysis & Impact-Based Test Selection
+
+Two AI-adjacent scripts that run **before** you push, not after a test fails.
+
+### Impact-based test selection (deterministic, no AI)
+
+`scripts/selectTests.ts` builds a static import graph of every spec file
+(`tests/pages`, `tests/fixtures`, `tests/builders`, `helpers/*`) and figures out
+which specs actually depend on what changed — no LLM call, no guessing.
+A CI gate that decides *what to run* needs to be exact, not probabilistic;
+that's a job for plain static analysis, not AI.
+
+```bash
+npm run ai:select              # compares against origin/main (or uncommitted changes)
+npm run ai:select -- main      # explicit base ref
+```
+
+Output: the list of impacted specs, a ready-to-run `npx playwright test ...`
+command, and `impacted-specs.txt` for CI to consume. Touching shared config
+(`playwright.config.ts`, `package.json`, `tsconfig.json`) always triggers a
+full regression instead of a partial one.
+
+### Risk analysis (Groq)
+
+`scripts/analyzeRisk.ts` takes the same diff, cross-references it against the
+impacted-specs result above, and asks Groq for a **judgment call** the graph
+can't make on its own: which changes are actually risky, and which changed
+code has *no* spec covering it at all.
+
+```bash
+npm run ai:risk                # compares against origin/main (or uncommitted changes)
+npm run ai:risk -- main        # explicit base ref
+```
+
+Output — `ai-risk-analysis.md`:
+
+```
+## Risk Summary
+## Affected User Flows
+## Regression Risk Areas       (High/Medium/Low, with reasoning)
+## Coverage Gaps                ← changed code with no existing test
+## Recommended New Test Cases   ← feed straight into `npm run ai:generate`
+```
+
+The split is deliberate: **static analysis decides what to run** (fast, exact,
+safe to gate CI on), **AI decides what's risky and untested** (fuzzy judgment,
+meant for a human to read, not to auto-block a merge on).
+
+---
+
 ## 🔄 CI/CD — GitHub Actions
 
 Tests run automatically on every `push` and `pull_request` to `main`.
@@ -385,4 +455,7 @@ npm run allure:report         # generate + open
 
 # AI
 npm run ai:analyze            # analyze latest test failures via Groq
+npm run ai:risk                # pre-merge risk analysis of the current diff
+npm run ai:select              # impact-based test selection (deterministic)
+npm run ai:generate            # generate spec files from feature descriptions
 ```

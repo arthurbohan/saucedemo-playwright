@@ -16,3 +16,10 @@ export {
     buildDetailedFailurePrompt,
     buildBatchAnalysisPrompt,
 } from './failureAnalysis'
+
+// Risk analysis prompts
+export {
+    RISK_ANALYSIS_SYSTEM,
+    buildRiskAnalysisPrompt,
+} from './riskAnalysis'
+export type { RiskAnalysisPromptInput } from './riskAnalysis'
