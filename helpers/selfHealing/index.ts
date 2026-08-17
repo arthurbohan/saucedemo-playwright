@@ -3,10 +3,14 @@
  */
 
 import { heal } from './core'
-import type { HealingConfig, HealResult } from './types'
+import type { HealingConfig } from './types'
 
-export type { HealResult, HealingConfig }
+export type { HealResult, HealingConfig, HealMethod } from './types'
 export type { GroqResponse, GroqOptions } from '../groq/types'
+
+export { logHealingEvent, readHealingLog } from './log'
+export type { HealingLogEntry } from './log'
+export { saveHealingSummary } from './reporter'
 
 export async function getHealed(
     page: any,

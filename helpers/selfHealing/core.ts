@@ -2,13 +2,15 @@
  * Core self-healing logic
  */
 
-import type { Page, Locator, HealingConfig, HealResult } from './types'
+import type { Page, Locator, HealingConfig, HealResult, HealMethod } from './types'
 import { CONFIG } from './config'
 import { getPageSnapshot, getInteractiveElements } from './snapshot'
 import { isValidPlaywrightSelector, sanitizeSelector } from './validation'
 import { getGroqClient } from '../groq/client'
 import { buildSelfHealingPrompt, buildSelfHealingRetryPrompt } from '../groq/prompts'
 import { generateFallbackSelector } from './fallback'
+import { logHealingEvent } from './log'
+import { tag, label, attachment } from 'allure-js-commons'
 
 export async function heal(
     page: Page,
@@ -21,6 +23,8 @@ export async function heal(
         maxRetries = CONFIG.DEFAULT_MAX_RETRIES,
         fallbackToText = true,
         logHealing = true,
+        testTitle = 'unknown',
+        testFile = 'unknown',
     } = config
 
     let originalSelector: string
@@ -39,6 +43,35 @@ export async function heal(
         return { healed: false, locator, newSelector: null, originalSelector }
     }
 
+    // Records every ATTEMPTED healing (original locator failed) to the shared
+    // JSONL log for scripts/summarizeHealing.ts, and tags the test in Allure
+    // so a healed pass is never visually indistinguishable from a plain one.
+    async function record(outcome: { healed: boolean; method: HealMethod | null; newSelector: string | null }): Promise<void> {
+        logHealingEvent({
+            timestamp: new Date().toISOString(),
+            testTitle,
+            testFile,
+            description,
+            originalSelector,
+            healed: outcome.healed,
+            method: outcome.method,
+            newSelector: outcome.newSelector,
+        })
+
+        try {
+            await tag('self-healing')
+            await label('healed', outcome.healed ? 'true' : 'false')
+            if (outcome.method) await label('heal-method', outcome.method)
+            await attachment(
+                'self-healing.json',
+                JSON.stringify({ description, originalSelector, ...outcome }, null, 2),
+                'application/json'
+            )
+        } catch {
+            // Allure's runtime context isn't always available — never fail the test over reporting
+        }
+    }
+
     if (logHealing) {
         console.warn(`\n⚠️  [Self-Healing] Locator failed for: "${description}"`)
         console.warn(`   Original selector: ${originalSelector}`)
@@ -50,6 +83,7 @@ export async function heal(
         groqClient = getGroqClient()
     } catch (error) {
         console.warn(`   ❌ Failed to initialize Groq client: ${error}`)
+        await record({ healed: false, method: null, newSelector: null })
         return { healed: false, locator, newSelector: null, originalSelector }
     }
 
@@ -125,11 +159,13 @@ export async function heal(
                 if (logHealing) {
                     console.warn('   ⚠️  Update your Page Object to fix this permanently!\n')
                 }
+                await record({ healed: true, method: 'ai', newSelector })
                 return {
                     healed: true,
                     locator: healedLocator,
                     newSelector,
                     originalSelector,
+                    method: 'ai',
                 }
             } else {
                 console.warn(`   ⚠️  Healed locator not visible: ${newSelector}`)
@@ -151,11 +187,13 @@ export async function heal(
                 if (count > 0) {
                     console.warn(`   ✅ Using fallback selector: ${fallbackSelector}`)
                     console.warn('   ⚠️  Update your Page Object to fix this permanently!\n')
+                    await record({ healed: true, method: 'fallback', newSelector: fallbackSelector })
                     return {
                         healed: true,
                         locator: fallbackLocator,
                         newSelector: fallbackSelector,
                         originalSelector,
+                        method: 'fallback',
                     }
                 }
             } catch {
@@ -165,6 +203,7 @@ export async function heal(
     }
 
     console.warn(`   ❌ Failed to heal locator. Using original: ${originalSelector}\n`)
+    await record({ healed: false, method: null, newSelector: null })
     return {
         healed: false,
         locator,

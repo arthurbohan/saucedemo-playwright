@@ -14,6 +14,7 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 - [Getting Started](#-getting-started)
 - [Running Tests](#-running-tests)
 - [AI Failure Analysis](#-ai-failure-analysis)
+- [Self-Healing Audit Trail](#-self-healing-audit-trail)
 - [AI Test Generation](#-ai-test-generation)
 - [Risk Analysis & Impact-Based Test Selection](#-risk-analysis--impact-based-test-selection)
 - [CI/CD](#-cicd)
@@ -86,6 +87,9 @@ project/
 │   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report
 │   ├── generateTests/                  Feature description → generated spec file (prompt lives in groq/prompts/)
 │   ├── selfHealing/                    Locator failed → AI picks alternative from DOM snapshot
+│   │   ├── core.ts                        heal() — logs + Allure-tags every attempt (see log.ts/reporter.ts)
+│   │   ├── log.ts                         JSONL log of every healing attempt (test-results/self-healing-log.jsonl)
+│   │   └── reporter.ts                    JSONL → self-healing-summary.md
 │   ├── riskAnalysis/                   Diff + impacted specs → Groq risk report
 │   ├── testSelection/                  Static import graph → impacted specs (no AI)
 │   └── git/                            git diff helper shared by risk/selection scripts
@@ -94,7 +98,8 @@ project/
 │   ├── analyzeFailure.ts               AI root-cause analysis of failed tests (ai:analyze)
 │   ├── generateTests.ts                AI test-case generation (ai:generate)
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
-│   └── selectTests.ts                  Impact-based regression selection (ai:select)
+│   ├── selectTests.ts                  Impact-based regression selection (ai:select)
+│   └── summarizeHealing.ts             Self-healing audit report (healing:summary)
 │
 ├── .github/workflows/
 │   └── playwright.yml               ← CI/CD pipeline
@@ -262,6 +267,52 @@ in GitHub Actions logs:
   await expect(checkoutPage.finishButton).toBeVisible()
   await checkoutPage.finish()
 ```
+
+---
+
+## 🩹 Self-Healing Audit Trail
+
+A healed test still passes — but it passed on a locator the AI (or the local
+fallback) guessed, not the one the Page Object declares. Left unflagged, that
+pass is indistinguishable from a normal one in any report, which is a real
+risk once humans (manual QA, reviewers) start trusting the report as-is: a
+UI change that *should* fail a test can slip through as green if a
+plausible-enough element still matches the description.
+
+Every `heal()` call that actually had to recover a locator (not just "checked
+and it was fine") is:
+
+- **Logged** to `test-results/self-healing-log.jsonl` — test, description,
+  original vs. healed selector, method (`ai` or `fallback`), and whether it
+  succeeded at all.
+- **Tagged in Allure** — `tag('self-healing')` plus `healed` / `heal-method`
+  labels and a `self-healing.json` attachment on the test, so Allure's own
+  filters can answer "show me every test that only passed via healing this
+  run" without reading logs.
+
+After a run, turn the log into a report:
+
+```bash
+npm run healing:summary
+```
+
+Output — `self-healing-summary.md`:
+
+```
+## ✅ Healed
+| Test | Description | Original selector | Via | New selector |
+|---|---|---|---|---|
+| inventory.healing.spec.ts: ... | Add to cart button for ... | [data-test="btn-add-..."] | ai | [data-test="add-to-cart-..."] |
+
+## ❌ Could not heal
+| Test | Description | Original selector |
+```
+
+In CI this runs after every E2E shard (`if: always()` — a healed test can
+still pass, so this isn't gated on failure), and the artifact is retained
+alongside the AI failure-analysis reports. Treat a run with entries here the
+same way you'd treat a skipped assertion: not a failure, but a flag that a
+Page Object selector has drifted and is due a real fix.
 
 ---
 
@@ -497,4 +548,5 @@ npm run ai:risk                # pre-merge risk analysis of the current diff
 npm run ai:select              # impact-based test selection (deterministic)
 npm run ai:generate            # generate spec files for all features (login, inventory, checkout, api)
 npm run ai:generate:api        # generate spec file for the API suite only
+npm run healing:summary        # build self-healing-summary.md from this run's healing log
 ```

@@ -12,3 +12,6 @@ allure-report/
 .env
 tests/specs/generated/
 ai-analysis-summary.md
+ai-risk-analysis.md
+impacted-specs.txt
+self-healing-summary.md

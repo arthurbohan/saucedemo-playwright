@@ -20,13 +20,15 @@
     "ai:generate:checkout": "npx tsx scripts/generateTests.ts checkout",
     "ai:generate:api": "npx tsx scripts/generateTests.ts api",
     "ai:risk": "npx tsx scripts/analyzeRisk.ts",
-    "ai:select": "npx tsx scripts/selectTests.ts"
+    "ai:select": "npx tsx scripts/selectTests.ts",
+    "healing:summary": "npx tsx scripts/summarizeHealing.ts"
   },
   "devDependencies": {
     "@faker-js/faker": "^10.5.0",
     "@playwright/test": "^1.61.0",
     "@types/node": "^25.9.3",
     "allure-commandline": "^2.43.0",
+    "allure-js-commons": "^3.10.2",
     "allure-playwright": "^3.10.2",
     "dotenv": "^17.4.2",
     "tsx": "^4.23.12"

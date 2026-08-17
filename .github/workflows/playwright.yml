@@ -62,6 +62,13 @@ jobs:
           CI: true
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
+      # Always runs — a healed locator can pass, so this isn't gated on failure()
+      # like the AI failure analysis above. Surfaces which tests only passed
+      # because a broken locator got recovered mid-run.
+      - name: Self-Healing Summary
+        if: always()
+        run: npx tsx scripts/summarizeHealing.ts
+
       - name: Upload blob report
         uses: actions/upload-artifact@v4
         if: always()
@@ -84,6 +91,15 @@ jobs:
         with:
           name: ai-analysis-shard-${{ matrix.shardIndex }}
           path: ai-analysis-summary.md
+          retention-days: 7
+
+      - name: Upload self-healing summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: self-healing-shard-${{ matrix.shardIndex }}
+          path: self-healing-summary.md
+          if-no-files-found: ignore
           retention-days: 7
 
       - name: Upload test artifacts on failure
@@ -354,8 +370,9 @@ jobs:
             const cutoff = now - (retentionDays * 24 * 60 * 60 * 1000);
 
             for (const artifact of artifacts.artifacts) {
-              // Keep AI reports and test artifacts longer
-              if (artifact.name.startsWith('ai-analysis') || 
+              // Keep AI reports, self-healing summaries and test artifacts longer
+              if (artifact.name.startsWith('ai-analysis') ||
+                  artifact.name.startsWith('self-healing') ||
                   artifact.name.startsWith('test-artifacts')) {
                 continue;
               }
