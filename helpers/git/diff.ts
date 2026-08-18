@@ -10,7 +10,7 @@
  *   3. last commit (HEAD~1 vs HEAD) — so a clean checkout still has something to show
  */
 
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 
 const RELEVANT_PATHS = ['tests', 'helpers', 'scripts', 'playwright.config.ts']
 
@@ -21,25 +21,31 @@ export interface DiffResult {
     diff: string
 }
 
-function run(cmd: string): string {
-    return execSync(cmd, { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 20 }).trim()
+// execFileSync (not execSync) — args are passed as an argv array with no
+// shell involved, so a ref containing shell metacharacters (`; rm -rf ~`,
+// `$(...)`) is just an invalid git ref, never interpreted code. explicitBase
+// here traces back to a CLI arg (and in CI, a PR base-branch name) — treat
+// any of that as untrusted input, not something safe to string-interpolate
+// into a shell command.
+function git(args: string[]): string {
+    return execFileSync('git', args, { encoding: 'utf-8', maxBuffer: 1024 * 1024 * 20 }).trim()
 }
 
 function refExists(ref: string): boolean {
     try {
-        run(`git rev-parse --verify ${ref}`)
+        git(['rev-parse', '--verify', ref])
         return true
     } catch {
         return false
     }
 }
 
-function changedFilesFor(range: string): string[] {
-    return run(`git diff --name-only ${range}`).split('\n').filter(Boolean)
+function changedFilesFor(revs: string[]): string[] {
+    return git(['diff', '--name-only', ...revs]).split('\n').filter(Boolean)
 }
 
-function diffFor(range: string): string {
-    return run(`git diff ${range} -- ${RELEVANT_PATHS.join(' ')}`)
+function diffFor(revs: string[]): string {
+    return git(['diff', ...revs, '--', ...RELEVANT_PATHS])
 }
 
 function resolveBaseRef(explicit?: string): string | null {
@@ -54,20 +60,20 @@ export function getDiff(explicitBase?: string): DiffResult {
 
     if (base) {
         const range = `${base}...HEAD`
-        const changedFiles = changedFilesFor(range)
+        const changedFiles = changedFilesFor([range])
         if (changedFiles.length > 0) {
-            return { base: range, changedFiles, diff: diffFor(range) }
+            return { base: range, changedFiles, diff: diffFor([range]) }
         }
     }
 
-    const uncommitted = changedFilesFor('HEAD')
+    const uncommitted = changedFilesFor(['HEAD'])
     if (uncommitted.length > 0) {
-        return { base: 'working tree (uncommitted)', changedFiles: uncommitted, diff: diffFor('HEAD') }
+        return { base: 'working tree (uncommitted)', changedFiles: uncommitted, diff: diffFor(['HEAD']) }
     }
 
     return {
         base: 'HEAD~1...HEAD',
-        changedFiles: changedFilesFor('HEAD~1 HEAD'),
-        diff: diffFor('HEAD~1 HEAD'),
+        changedFiles: changedFilesFor(['HEAD~1', 'HEAD']),
+        diff: diffFor(['HEAD~1', 'HEAD']),
     }
 }

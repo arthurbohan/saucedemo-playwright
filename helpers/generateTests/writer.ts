@@ -15,6 +15,14 @@ import path from 'path'
 const OUTPUT_DIR = path.join(process.cwd(), 'tests', 'specs', 'generated')
 
 export function saveGeneratedSpec(feature: string, code: string): string {
+  // Defense in depth: `feature` ends up in a filesystem path below. Even
+  // though the CLI validates it against known feature keys first, this
+  // module shouldn't trust that every future caller will — a value like
+  // '../../../etc/passwd' would otherwise let path.join() escape OUTPUT_DIR.
+  if (!/^[a-zA-Z0-9_-]+$/.test(feature)) {
+    throw new Error(`Invalid feature name: "${feature}" — must be alphanumeric/dash/underscore only`)
+  }
+
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true })
     console.log(`  Created output folder: ${OUTPUT_DIR}`)
