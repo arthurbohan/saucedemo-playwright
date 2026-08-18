@@ -17,6 +17,33 @@ concurrency:
 
 jobs:
 
+  # ─── JOB 0: Lint ──────────────────────────────────────────────────────────
+  #
+  # Unlike risk-analysis below, this IS a required check — lint is
+  # deterministic and fast (no AI, no network), so a failure here is a real
+  # problem to fix, not a fuzzy judgment call to just surface for review.
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
   # ─── JOB 1: E2E tests with sharding + Docker ─────────────────────────────────
 
   test-e2e:
@@ -158,7 +185,59 @@ jobs:
           path: allure-results/
           retention-days: 1
 
-  # ─── JOB 3: Merge Playwright shard reports ───────────────────────────────────
+  # ─── JOB 3: AI risk analysis (PR advisory — never gates the merge) ───────────
+  #
+  # Deliberately NOT a replacement for the full regression above: it's a fast
+  # (~seconds) signal for the reviewer, posted as a PR comment, while test-e2e
+  # / test-api remain the actual required checks. See README § Risk Analysis.
+
+  risk-analysis:
+    name: AI Risk Analysis (PR advisory)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run AI risk analysis
+        run: npx tsx scripts/analyzeRisk.ts origin/${{ github.event.pull_request.base.ref }}
+        env:
+          CI: true
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        continue-on-error: true # advisory only — never fail the PR over this
+
+      - name: Check report was generated
+        id: check
+        if: always()
+        run: echo "exists=$([ -f ai-risk-analysis.md ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      # Updates the same comment on every push instead of spamming a new one —
+      # sticky-pull-request-comment handles the find-or-create logic itself.
+      - name: Post risk analysis as PR comment
+        if: always() && steps.check.outputs.exists == 'true'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ai-risk-analysis
+          path: ai-risk-analysis.md
+
+  # ─── JOB 4: Merge Playwright shard reports ───────────────────────────────────
 
   merge-reports:
     name: Merge E2E Reports
@@ -197,7 +276,7 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-  # ─── JOB 4: Publish Allure to GitHub Pages ───────────────────────────────────
+  # ─── JOB 5: Publish Allure to GitHub Pages ───────────────────────────────────
 
   publish-allure:
     name: Publish Allure Report
@@ -254,7 +333,7 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
-  # ─── JOB 5: Telegram notification with AI analysis ───────────────────────────
+  # ─── JOB 6: Telegram notification with AI analysis ───────────────────────────
 
   notify-telegram:
     name: Telegram Notification

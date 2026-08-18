@@ -4,7 +4,9 @@ test.describe('Login page', () => {
 
     test.describe('Page load', () => {
 
-        test('page title is Swag Labs', async ({ loginPage, page }) => {
+        // loginPage is requested for its setup side effect (navigates to '/'),
+        // not used directly — see pages.fixture.ts
+        test('page title is Swag Labs', async ({ loginPage: _loginPage, page }) => {
             await expect(page).toHaveTitle('Swag Labs')
         })
 

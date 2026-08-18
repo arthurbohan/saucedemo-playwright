@@ -399,6 +399,17 @@ The split is deliberate: **static analysis decides what to run** (fast, exact,
 safe to gate CI on), **AI decides what's risky and untested** (fuzzy judgment,
 meant for a human to read, not to auto-block a merge on).
 
+### In CI: advisory only, never a gate
+
+On every pull request, a `risk-analysis` job runs `ai:risk` against the PR's
+base branch and posts (and keeps updating) the result as a PR comment —
+`continue-on-error: true`, so a Groq hiccup never fails the PR. It does **not**
+replace the full E2E/API regression, and `ai:select` is *not* wired into CI at
+all — deliberately: this repo's fixtures barrel-export everything through one
+`tests/fixtures/index.ts`, so most changes already touch 6/7 specs, making
+selective test running here save little while risking a silently-skipped
+regression. `ai:select` stays a local, pre-push convenience command.
+
 ---
 
 ## 🔄 CI/CD — GitHub Actions
@@ -535,6 +546,9 @@ npm run test:e2e              # UI tests only
 npm run test:api              # API tests only
 npm run test:generated        # generated UI specs (review before promoting)
 npm run test:generated:api    # generated API specs (review before promoting)
+
+# Lint
+npm run lint                  # eslint . — recommended before every push, alongside ai:risk/ai:select
 
 # Reports
 npm run report:pw             # open Playwright HTML report

@@ -84,7 +84,7 @@ export class FailureCollector {
                 content,
                 testName,
             }
-        } catch (error) {
+        } catch {
             this.logger.error(`Failed to parse failure file: ${filePath}`)
             return null
         }

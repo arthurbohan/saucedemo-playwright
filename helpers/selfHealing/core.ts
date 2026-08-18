@@ -92,18 +92,13 @@ export async function heal(
 
     let newSelector: string | null = null
     let attempts = 0
+    let nextPrompt = buildSelfHealingPrompt(description, snapshotText, interactiveElements)
 
     while (attempts < maxRetries && !newSelector) {
         attempts++
         try {
-            const prompt = buildSelfHealingPrompt(
-                description,
-                snapshotText,
-                interactiveElements
-            )
-
             const response = await groqClient.ask(
-                prompt,
+                nextPrompt,
                 'You are a Playwright locator expert. Return only the selector. No explanation.',
                 {
                     maxTokens: 300,
@@ -130,7 +125,7 @@ export async function heal(
                 )
 
                 if (attempts < maxRetries) {
-                    const retryPrompt = buildSelfHealingRetryPrompt(
+                    nextPrompt = buildSelfHealingRetryPrompt(
                         description,
                         sanitized,
                         'Invalid Playwright selector format'

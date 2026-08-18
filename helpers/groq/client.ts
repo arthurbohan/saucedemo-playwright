@@ -86,7 +86,7 @@ export class GroqClient {
                     body: JSON.stringify(request),
                 })
             } catch (error) {
-                throw new Error(`Groq API request failed: ${error instanceof Error ? error.message : error}`)
+                throw new Error(`Groq API request failed: ${error instanceof Error ? error.message : error}`, { cause: error })
             }
 
             // Groq's free tier enforces an 8000 tokens/minute cap PER MODEL — a
