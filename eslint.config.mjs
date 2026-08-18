@@ -35,5 +35,17 @@ export default tseslint.config(
     rules: {
       'no-empty-pattern': 'off',
     },
+  },
+  {
+    // CommonJS helper scripts loaded by GitHub Actions (actions/github-script's
+    // `require('./...')` pattern) — plain Node, not part of the TS project
+    files: ['.github/scripts/**/*.js'],
+    languageOptions: {
+      globals: {
+        module: 'writable',
+        require: 'readonly',
+        console: 'readonly',
+      },
+    },
   }
 )

