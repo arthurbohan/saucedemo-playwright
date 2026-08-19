@@ -9,13 +9,18 @@
 # by the workflow — never interpolate ${{ }} directly into this file, that
 # reintroduces the script-injection risk this extraction exists to avoid.
 #
+# Only ever runs on push to main (the merge landing) — the test suite itself
+# is PR-only now, so this reports on find-pr-run's resolved PR run rather
+# than a fresh one. See playwright.yml § notify-telegram.
+#
 # Required env vars:
-#   E2E_STATUS, API_STATUS        — needs.test-e2e.result / needs.test-api.result
-#   EVENT_NAME                    — github.event_name
-#   PR_NUMBER, PR_TITLE           — set only when EVENT_NAME == 'pull_request'
+#   E2E_STATUS, API_STATUS        — both carry find-pr-run's single overall conclusion
+#   EVENT_NAME                    — github.event_name (always 'push' in practice)
+#   PR_NUMBER                     — the merged PR's number, from find-pr-run
+#   PR_TITLE                      — optional, may be empty
 #   REF_NAME                      — github.ref_name
 #   REPO_OWNER, REPO_NAME         — github.repository_owner / repo name
-#   RUN_URL                       — link to this Actions run
+#   RUN_URL                       — link to the PR's original test run
 #   COMMIT_SHA                    — github.sha
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 #   AI_SUMMARY_PATH                — path to ai-analysis-summary.md, if downloaded
@@ -37,6 +42,8 @@ ALLURE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/"
 
 if [[ "$EVENT_NAME" == "pull_request" ]]; then
   TRIGGER="PR #${PR_NUMBER}: ${PR_TITLE}"
+elif [[ -n "${PR_NUMBER:-}" ]]; then
+  TRIGGER="Merged PR #${PR_NUMBER} → ${REF_NAME}"
 else
   TRIGGER="Push to ${REF_NAME}"
 fi
