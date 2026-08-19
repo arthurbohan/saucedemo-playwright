@@ -17,7 +17,7 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 - [Self-Healing Audit Trail](#-self-healing-audit-trail)
 - [AI Test Generation](#-ai-test-generation)
 - [Risk Analysis & Impact-Based Test Selection](#-risk-analysis--impact-based-test-selection)
-- [CI/CD](#-cicd)
+- [CI/CD — GitHub Actions](#-cicd--github-actions)
 - [Reporting](#-reporting)
 - [Test Users](#-test-users-saucedemo)
 - [API Reference](#-api-reference-jsonplaceholder)
@@ -27,7 +27,7 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 ## 🛠 Tech Stack
 
 | Tool | Version | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | [Playwright](https://playwright.dev) | ^1.61.0 | Browser automation + API testing |
 | [TypeScript](https://www.typescriptlang.org) | ^5.x | Type-safe test code |
 | [@faker-js/faker](https://fakerjs.dev) | ^8.4.1 | Test data generation |
@@ -477,7 +477,7 @@ directly).
 ### Projects
 
 | Project | Test directory | Base URL |
-|---|---|---|
+| --- | --- | --- |
 | `setup` | `specs/auth.setup.ts` | saucedemo.com |
 | `sd-e2e` | `specs/features/` | saucedemo.com |
 | `jp-api` | `specs/api/` | jsonplaceholder.typicode.com |
@@ -503,7 +503,7 @@ TELEGRAM_CHAT_ID    — Telegram chat or channel ID
 ### Artifacts
 
 | Artifact | When uploaded | Contents |
-|---|---|---|
+| --- | --- | --- |
 | `playwright-report-e2e` | Always | Merged HTML report from all shards |
 | `allure-results-shard-*` | Always | Raw Allure data per shard |
 | `ai-analysis-shard-*` | On failure | AI root cause analysis |
@@ -544,7 +544,7 @@ https://<username>.github.io/<repo>/
 All users share the same password: `secret_sauce`
 
 | Username | Behavior |
-|---|---|
+| --- | --- |
 | `standard_user` | Everything works normally |
 | `locked_out_user` | Cannot log in — sees lockout error |
 | `problem_user` | UI bugs (broken images, wrong sort) |
@@ -561,7 +561,7 @@ Base URL: `https://jsonplaceholder.typicode.com/`
 > `'/posts'` resolves to `https://jsonplaceholder.typicode.com/posts` but loses the base path in some contexts ❌
 
 | Resource | Count | Description |
-|---|---|---|
+| --- | --- | --- |
 | `posts` | 100 | Posts (userId 1–10) |
 | `comments` | 500 | Comments (postId 1–100) |
 | `users` | 10 | Users |
