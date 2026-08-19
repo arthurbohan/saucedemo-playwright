@@ -105,12 +105,13 @@ project/
 ├── .github/
 │   ├── workflows/
 │   │   ├── pr-checks.yml               on: pull_request — lint/test-e2e/test-api/risk-analysis
-│   │   └── on-merge.yml                on: push to main — publish-allure/notify-telegram, no re-test
+│   │   ├── on-merge.yml                on: push to main — publish-allure/notify-telegram, no re-test
+│   │   └── full-regression.yml         on: workflow_dispatch — heavy suite, never gates a PR
 │   └── scripts/                        Notification/cleanup logic — kept out of the YAML
 │       ├── notify-telegram.sh             Untrusted values arrive via env, never spliced into the script
 │       ├── find-pr-run.js                 push → the PR run that already tested this code
 │       ├── cleanup-artifacts.js
-│       └── runRegression.sh               npm run regression — local, no CI trigger involved
+│       └── runRegression.sh               npm run regression — local counterpart to full-regression.yml
 ├── eslint.config.mjs                ← flat config, no-semicolons house style (npm run lint)
 ├── playwright.config.ts
 ├── package.json
@@ -441,13 +442,18 @@ suite is the expensive part (sharded browsers, Docker); re-running it a
 second time for the exact code that was just tested is pure waste, so the
 merge reuses the PR run's artifacts instead of re-testing.
 
-This is two separate workflow files, each with its own trigger, rather than
-one file with `if: github.event_name == ...` guards scattered through every
-job — a job either belongs to the PR pipeline or the merge pipeline, and its
-file's trigger is the only place that's decided:
+This is three separate workflow files, each with its own trigger, rather
+than one file with `if: github.event_name == ...` guards scattered through
+every job — a job belongs to exactly one pipeline, and its file's trigger is
+the only place that's decided:
 
 - **[`pr-checks.yml`](.github/workflows/pr-checks.yml)** — `on: pull_request`.
-  Runs the actual test suite.
+  The merge gate. Deliberately stays small and fast regardless of how large
+  the suite gets — a 1000-test/20-minute suite has no business blocking
+  every PR. If the suite ever grows past "fast enough to gate on entirely",
+  the fix is to gate on an impact-selected subset (`ai:select`) here, not to
+  drop the gate — see [Risk Analysis & Impact-Based Test
+  Selection](#-risk-analysis--impact-based-test-selection).
 - **[`on-merge.yml`](.github/workflows/on-merge.yml)** — `on: push` to `main`.
   Never re-runs tests; reuses `pr-checks.yml`'s artifacts. Deliberately kept
   on `push` rather than `pull_request: closed` — GitHub's `github-pages`
@@ -455,6 +461,12 @@ file's trigger is the only place that's decided:
   (`refs/heads/main`); `pull_request` events, even on close, always report
   the ephemeral `refs/pull/N/merge` ref instead and get rejected by that
   protection rule.
+- **[`full-regression.yml`](.github/workflows/full-regression.yml)** —
+  `on: workflow_dispatch` only, never gates anything. The CI counterpart to
+  `npm run regression` below: runs the whole suite on demand, publishes its
+  own Allure report, sends its own Telegram summary. This is where a heavy
+  suite belongs once it outgrows the PR gate — a safety net you trigger by
+  hand (or, later, on a schedule), decoupled from any single PR.
 
 ### Pipeline overview
 
@@ -490,9 +502,11 @@ If `find-pr-run` can't resolve a PR for the push (e.g. someone pushed to
 both no-op rather than guess — see
 [`find-pr-run.js`](.github/scripts/find-pr-run.js).
 
-Want to run the full suite + Allure + Telegram notification on demand,
-outside of any CI trigger? `npm run regression` does exactly that locally —
-see [`runRegression.sh`](.github/scripts/runRegression.sh).
+Want to run the full suite + Allure + Telegram notification on demand?
+`npm run regression` does exactly that locally — see
+[`runRegression.sh`](.github/scripts/runRegression.sh) — and
+`full-regression.yml` does the same thing in CI, from the Actions tab's "Run
+workflow" button.
 
 Notification and cleanup logic lives in `.github/scripts/`, not inline in the
 YAML — `notify-telegram.sh` in particular takes untrusted values (PR title,

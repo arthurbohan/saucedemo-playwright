@@ -9,20 +9,23 @@
 # by the workflow — never interpolate ${{ }} directly into this file, that
 # reintroduces the script-injection risk this extraction exists to avoid.
 #
-# Runs in two contexts:
+# Runs in three contexts:
 #   1. CI, on push to main (the merge landing) — see on-merge.yml. Reports on
 #      find-pr-run's resolved pr-checks.yml run rather than a fresh one.
-#   2. Locally, via .github/scripts/runRegression.sh (EVENT_NAME=local) — a
-#      manual full-regression run, no CI/PR involved at all.
+#   2. CI, on workflow_dispatch — see full-regression.yml. A heavy/full
+#      regression run, deliberately kept off the PR gate; reports on itself.
+#   3. Locally, via .github/scripts/runRegression.sh (EVENT_NAME=local) — the
+#      same full regression, run from a laptop instead of CI.
 #
 # Required env vars:
 #   E2E_STATUS, API_STATUS        — both carry find-pr-run's single overall conclusion
-#   EVENT_NAME                    — 'pull_request' (PR opened/updated), 'merged' (PR merged in CI), or 'local'
-#   PR_NUMBER                     — the merged PR's number, from find-pr-run
-#   PR_TITLE                      — the merged PR's title, from find-pr-run
+#   EVENT_NAME                    — 'pull_request', 'merged', 'manual' (full-regression.yml), or 'local'
+#   PR_NUMBER                     — the merged PR's number, from find-pr-run (empty outside context 1)
+#   PR_TITLE                      — the merged PR's title, from find-pr-run (empty outside context 1)
+#   TRIGGERED_BY                  — github.actor, only set for EVENT_NAME=manual
 #   REF_NAME                      — github.ref_name
 #   REPO_OWNER, REPO_NAME         — github.repository_owner / repo name
-#   RUN_URL                       — link to the PR's original test run
+#   RUN_URL                       — link to the run being reported on
 #   COMMIT_SHA                    — github.sha
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 #   AI_SUMMARY_PATH                — path to ai-analysis-summary.md, if downloaded
@@ -46,6 +49,8 @@ if [[ "$EVENT_NAME" == "pull_request" ]]; then
   TRIGGER="PR #${PR_NUMBER}: ${PR_TITLE}"
 elif [[ "$EVENT_NAME" == "merged" ]]; then
   TRIGGER="Merged PR #${PR_NUMBER}: ${PR_TITLE} → ${REF_NAME}"
+elif [[ "$EVENT_NAME" == "manual" ]]; then
+  TRIGGER="Full regression, triggered by ${TRIGGERED_BY:-someone} (${REF_NAME})"
 elif [[ "$EVENT_NAME" == "local" ]]; then
   TRIGGER="Local regression run (${REF_NAME})"
 else
