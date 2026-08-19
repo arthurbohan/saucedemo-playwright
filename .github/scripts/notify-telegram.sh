@@ -10,21 +10,20 @@
 # reintroduces the script-injection risk this extraction exists to avoid.
 #
 # Runs in two contexts:
-#   1. CI, on pull_request:closed (merge landing) — the test suite itself is
-#      PR-only now, so this reports on find-pr-run's resolved PR run rather
-#      than a fresh one. See playwright.yml § notify-telegram.
+#   1. CI, on push to main (the merge landing) — see on-merge.yml. Reports on
+#      find-pr-run's resolved pr-checks.yml run rather than a fresh one.
 #   2. Locally, via .github/scripts/runRegression.sh (EVENT_NAME=local) — a
 #      manual full-regression run, no CI/PR involved at all.
 #
 # Required env vars:
 #   E2E_STATUS, API_STATUS        — both carry find-pr-run's single overall conclusion
-#   EVENT_NAME                    — 'pull_request' (PR opened/updated), 'merged' (PR closed+merged in CI), or 'local'
-#   PR_NUMBER                     — the (merged) PR's number
-#   PR_TITLE                      — the PR's title, from github.event.pull_request.title
-#   REF_NAME                      — target branch (github.event.pull_request.base.ref in CI)
+#   EVENT_NAME                    — 'pull_request' (PR opened/updated), 'merged' (PR merged in CI), or 'local'
+#   PR_NUMBER                     — the merged PR's number, from find-pr-run
+#   PR_TITLE                      — the merged PR's title, from find-pr-run
+#   REF_NAME                      — github.ref_name
 #   REPO_OWNER, REPO_NAME         — github.repository_owner / repo name
 #   RUN_URL                       — link to the PR's original test run
-#   COMMIT_SHA                    — github.event.pull_request.merge_commit_sha in CI
+#   COMMIT_SHA                    — github.sha
 #   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 #   AI_SUMMARY_PATH                — path to ai-analysis-summary.md, if downloaded
 

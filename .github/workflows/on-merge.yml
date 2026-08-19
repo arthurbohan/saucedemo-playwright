@@ -1,0 +1,177 @@
+name: On Merge
+
+# Push-only, separate from pr-checks.yml on purpose: this never re-runs the
+# test suite. It locates the pull_request run that already tested this exact
+# commit (pr-checks.yml, workflow_id below) and reuses its artifacts to
+# publish the Allure report and send a Telegram notification.
+#
+# Kept on `push` rather than `pull_request: closed` — GitHub's github-pages
+# environment only allows deploys from a real branch ref (refs/heads/main);
+# pull_request events, even on close, always report the ephemeral
+# refs/pull/N/merge ref instead and get rejected by that protection rule.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ─── JOB 1: Locate the merged PR's CI run ────────────────────────────────────
+  #
+  # Resolves which pr-checks.yml run already tested this exact code, so the
+  # two jobs below can reuse its artifacts instead of re-running the whole
+  # suite a second time on every merge. Works for any merge strategy — uses
+  # GitHub's own commit↔PR tracking, not a SHA/message guess. See
+  # .github/scripts/find-pr-run.js.
+
+  find-pr-run:
+    name: Locate merged PR's CI run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+      conclusion: ${{ steps.find.outputs.conclusion }}
+      pr_number: ${{ steps.find.outputs.pr_number }}
+      pr_title: ${{ steps.find.outputs.pr_title }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Find the merged PR's CI run
+        id: find
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const find = require('./.github/scripts/find-pr-run.js')
+            await find({ github, context, core })
+
+  # ─── JOB 2: Publish Allure to GitHub Pages ───────────────────────────────────
+  #
+  # Does NOT re-run tests — downloads allure-results from the PR run that
+  # find-pr-run located above. If that lookup came up empty (direct push, no
+  # associated PR), this just doesn't run.
+
+  publish-allure:
+    name: Publish Allure Report
+    runs-on: ubuntu-latest
+    needs: find-pr-run
+    if: needs.find-pr-run.outputs.run_id != ''
+
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Allure results from the PR's CI run
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results/
+          merge-multiple: true
+          run-id: ${{ needs.find-pr-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Allure CLI
+        run: |
+          curl -o allure.tgz -L https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
+          tar -xzf allure.tgz
+          sudo mv allure-2.30.0 /opt/allure
+          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
+
+      - name: Generate Allure report
+        run: allure generate allure-results --clean -o allure-report
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report/
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+  # ─── JOB 3: Telegram notification with AI analysis ───────────────────────────
+  #
+  # Same reasoning as publish-allure — reports on the merge using
+  # find-pr-run's resolved run instead of triggering a fresh test run.
+  # `always()` here (unlike publish-allure above) is deliberate: still notify
+  # even if the Pages deploy itself failed.
+
+  notify-telegram:
+    name: Telegram Notification
+    runs-on: ubuntu-latest
+    needs: [find-pr-run, publish-allure]
+    if: always() && needs.find-pr-run.outputs.run_id != ''
+
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download AI analysis (if exists)
+        uses: actions/download-artifact@v4
+        if: needs.find-pr-run.outputs.conclusion == 'failure'
+        with:
+          pattern: ai-analysis-*
+          path: ai-summaries/
+          merge-multiple: true
+          run-id: ${{ needs.find-pr-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Send Telegram notification
+        run: bash .github/scripts/notify-telegram.sh
+        env:
+          # Untrusted values (PR title etc.) travel as env vars, never as
+          # ${{ }} text interpolated straight into the shell script.
+          # E2E_STATUS/API_STATUS both carry the PR run's single overall
+          # conclusion — there's no separate e2e/api result to report here,
+          # the suite already ran once, on the PR.
+          E2E_STATUS: ${{ needs.find-pr-run.outputs.conclusion }}
+          API_STATUS: ${{ needs.find-pr-run.outputs.conclusion }}
+          EVENT_NAME: merged
+          PR_NUMBER: ${{ needs.find-pr-run.outputs.pr_number }}
+          PR_TITLE: ${{ needs.find-pr-run.outputs.pr_title }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ needs.find-pr-run.outputs.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AI_SUMMARY_PATH: ai-summaries/ai-analysis-summary.md

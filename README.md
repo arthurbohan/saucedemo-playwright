@@ -104,11 +104,13 @@ project/
 │
 ├── .github/
 │   ├── workflows/
-│   │   └── playwright.yml              CI/CD pipeline
+│   │   ├── pr-checks.yml               on: pull_request — lint/test-e2e/test-api/risk-analysis
+│   │   └── on-merge.yml                on: push to main — publish-allure/notify-telegram, no re-test
 │   └── scripts/                        Notification/cleanup logic — kept out of the YAML
 │       ├── notify-telegram.sh             Untrusted values arrive via env, never spliced into the script
 │       ├── find-pr-run.js                 push → the PR run that already tested this code
-│       └── cleanup-artifacts.js
+│       ├── cleanup-artifacts.js
+│       └── runRegression.sh               npm run regression — local, no CI trigger involved
 ├── eslint.config.mjs                ← flat config, no-semicolons house style (npm run lint)
 ├── playwright.config.ts
 ├── package.json
@@ -434,38 +436,48 @@ regression. `ai:select` stays a local, pre-push convenience command.
 
 ## 🔄 CI/CD — GitHub Actions
 
-Tests run once per change, on `pull_request` open/update — **not again**
-when the PR closes and merges. The suite is the expensive part (sharded
-browsers, Docker); re-running it a second time for the exact code that was
-just tested is pure waste, so the merge event reuses the PR run's artifacts
-instead of re-testing.
+Tests run once per change, on the PR — **not again** when it merges. The
+suite is the expensive part (sharded browsers, Docker); re-running it a
+second time for the exact code that was just tested is pure waste, so the
+merge reuses the PR run's artifacts instead of re-testing.
 
-The whole pipeline is a single `pull_request` trigger
-(`types: [opened, synchronize, reopened, closed]`) — there's no separate
-`push` trigger to reconcile. On close, the event payload already hands over
-the PR's head SHA and number directly, so finding "which run tested this"
-is a direct lookup, not a guess.
+This is two separate workflow files, each with its own trigger, rather than
+one file with `if: github.event_name == ...` guards scattered through every
+job — a job either belongs to the PR pipeline or the merge pipeline, and its
+file's trigger is the only place that's decided:
+
+- **[`pr-checks.yml`](.github/workflows/pr-checks.yml)** — `on: pull_request`.
+  Runs the actual test suite.
+- **[`on-merge.yml`](.github/workflows/on-merge.yml)** — `on: push` to `main`.
+  Never re-runs tests; reuses `pr-checks.yml`'s artifacts. Deliberately kept
+  on `push` rather than `pull_request: closed` — GitHub's `github-pages`
+  environment only allows deploys from a real branch ref
+  (`refs/heads/main`); `pull_request` events, even on close, always report
+  the ephemeral `refs/pull/N/merge` ref instead and get rejected by that
+  protection rule.
 
 ### Pipeline overview
 
 ```
-pull_request: opened/synchronize/reopened   pull_request: closed (merged)
+pr-checks.yml (on: pull_request)            on-merge.yml (on: push to main)
     │                                          │
     ├── lint          → required, seconds      ├── find-pr-run
-    │                                          │     └── looks up the run for
-    ├── test-e2e (4 shards, Docker)            │        this exact head SHA
-    │     └── required — the actual gate       │        (any merge strategy)
+    │                                          │     └── resolves which
+    ├── test-e2e (4 shards, Docker)            │        pr-checks.yml run
+    │     └── required — the actual gate       │        tested this exact
+    │                                          │        code (any merge
+    ├── test-api       → required              │        strategy)
     │                                          │
-    ├── test-api       → required              ├── publish-allure
-    │                                          │     └── downloads THAT run's
-    ├── risk-analysis  → advisory, never       │        allure-results — no
-    │     blocks (continue-on-error)           │        fresh test run
-    │     └── posted/updated as a PR comment   │     └── GitHub Pages
-    │                                          │
-    └── merge-reports                          └── notify-telegram
-          → single Playwright HTML report            → status + Allure link
-                                                         + AI snippet, from
-                                                         that same PR run
+    ├── risk-analysis  → advisory, never       ├── publish-allure
+    │     blocks (continue-on-error)           │     └── downloads THAT run's
+    │     └── posted/updated as a PR comment   │        allure-results — no
+    │                                          │        fresh test run
+    ├── merge-reports                          │     └── GitHub Pages
+    │     → single Playwright HTML report      │
+    │                                          └── notify-telegram
+    └── cleanup                                      → status + Allure link
+          → deletes this run's old artifacts            + AI snippet, from
+                                                            that same PR run
 ```
 
 `lint`, `test-e2e` and `test-api` are the required checks — the actual merge
@@ -473,9 +485,10 @@ gate. `risk-analysis` is advisory only. `ai:select` is deliberately *not*
 wired into CI at all — see [Risk Analysis & Impact-Based Test
 Selection](#-risk-analysis--impact-based-test-selection) for why.
 
-If `find-pr-run` can't resolve a run for the merged PR (e.g. it closed
-without ever running CI), `publish-allure` and `notify-telegram` both no-op
-rather than guess — see [`find-pr-run.js`](.github/scripts/find-pr-run.js).
+If `find-pr-run` can't resolve a PR for the push (e.g. someone pushed to
+`main` directly, bypassing review), `publish-allure` and `notify-telegram`
+both no-op rather than guess — see
+[`find-pr-run.js`](.github/scripts/find-pr-run.js).
 
 Want to run the full suite + Allure + Telegram notification on demand,
 outside of any CI trigger? `npm run regression` does exactly that locally —

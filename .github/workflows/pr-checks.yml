@@ -1,14 +1,17 @@
-name: Playwright Tests
+name: PR Checks
+
+# Everything here is gated on a pull_request event — no push trigger, no
+# per-job `if: github.event_name == ...` checks needed. See on-merge.yml for
+# the separate, merge-only pipeline (Allure publish + Telegram notify).
 
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, closed]
 
-# Least-privilege default — jobs that need more (publish-allure needs
-# pages/id-token, risk-analysis needs pull-requests) declare their own
-# `permissions:` block, which fully replaces this default for that job
-# rather than adding to it.
+# Least-privilege default — jobs that need more (risk-analysis needs
+# pull-requests, cleanup needs actions) declare their own `permissions:`
+# block, which fully replaces this default for that job rather than adding
+# to it.
 permissions:
   contents: read
 
@@ -27,7 +30,6 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    if: github.event.action != 'closed'
     timeout-minutes: 5
 
     steps:
@@ -48,16 +50,15 @@ jobs:
 
   # ─── JOB 1: E2E tests with sharding + Docker ─────────────────────────────────
   #
-  # Runs on PR open/update, not on close — this is the actual merge gate. It
-  # deliberately does NOT re-run when the PR closes/merges: that would
-  # re-test the exact same code a second time right after it already ran.
-  # publish-allure / notify-telegram below reuse THIS run's artifacts on
-  # merge instead of triggering a fresh run.
+  # This is the actual merge gate. It deliberately does NOT also run on
+  # merge (see on-merge.yml): that would re-test the exact same code a
+  # second time right after it already ran here. publish-allure /
+  # notify-telegram over there reuse THIS run's artifacts instead of
+  # triggering a fresh run.
 
   test-e2e:
     name: E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     runs-on: ubuntu-latest
-    if: github.event.action != 'closed'
     timeout-minutes: 15
 
     container:
@@ -151,7 +152,6 @@ jobs:
   test-api:
     name: API Tests (jsonplaceholder)
     runs-on: ubuntu-latest
-    if: github.event.action != 'closed'
     timeout-minutes: 10
 
     steps:
@@ -204,7 +204,6 @@ jobs:
   risk-analysis:
     name: AI Risk Analysis (PR advisory)
     runs-on: ubuntu-latest
-    if: github.event.action != 'closed'
     timeout-minutes: 5
 
     permissions:
@@ -256,7 +255,7 @@ jobs:
     name: Merge E2E Reports
     runs-on: ubuntu-latest
     needs: test-e2e
-    if: always() && github.event.action != 'closed'
+    if: always()
 
     steps:
       - name: Checkout code
@@ -289,174 +288,12 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
-  # ─── JOB 5: Locate the merged PR's CI run ────────────────────────────────────
-  #
-  # Fires on pull_request:closed, guarded to merged PRs only. The trigger
-  # event already hands us the exact head SHA and PR number directly — no
-  # need to guess which PR a commit belongs to, so this just looks up the
-  # pull_request-triggered run for that SHA, for the two jobs below to reuse
-  # its artifacts instead of re-running the whole suite on every merge.
-  # See .github/scripts/find-pr-run.js.
-
-  find-pr-run:
-    name: Locate merged PR's CI run
-    runs-on: ubuntu-latest
-    if: github.event.action == 'closed' && github.event.pull_request.merged == true
-    timeout-minutes: 5
-
-    permissions:
-      contents: read
-      actions: read
-
-    outputs:
-      run_id: ${{ steps.find.outputs.run_id }}
-      conclusion: ${{ steps.find.outputs.conclusion }}
-      pr_number: ${{ steps.find.outputs.pr_number }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Find the merged PR's CI run
-        id: find
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const find = require('./.github/scripts/find-pr-run.js')
-            await find({ github, context, core })
-
-  # ─── JOB 6: Publish Allure to GitHub Pages ───────────────────────────────────
-  #
-  # Runs on merge, and does NOT re-run tests — downloads allure-results from
-  # the PR run that find-pr-run located above. If that lookup came up empty,
-  # this just doesn't run. find-pr-run itself is skipped for non-closed
-  # events, so `always()` is needed here to not inherit that skip.
-
-  publish-allure:
-    name: Publish Allure Report
-    runs-on: ubuntu-latest
-    needs: find-pr-run
-    if: always() && needs.find-pr-run.outputs.run_id != ''
-
-    permissions:
-      contents: read
-      actions: read
-      pages: write
-      id-token: write
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download Allure results from the PR's CI run
-        uses: actions/download-artifact@v4
-        with:
-          pattern: allure-results-*
-          path: allure-results/
-          merge-multiple: true
-          run-id: ${{ needs.find-pr-run.outputs.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Install Allure CLI
-        run: |
-          curl -o allure.tgz -L https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
-          tar -xzf allure.tgz
-          sudo mv allure-2.30.0 /opt/allure
-          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
-
-      - name: Generate Allure report
-        run: allure generate allure-results --clean -o allure-report
-
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: allure-report/
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
-
-  # ─── JOB 7: Telegram notification with AI analysis ───────────────────────────
-  #
-  # Runs on merge, same reasoning as publish-allure — reports using
-  # find-pr-run's resolved run instead of triggering a fresh test run.
-
-  notify-telegram:
-    name: Telegram Notification
-    runs-on: ubuntu-latest
-    needs: [find-pr-run, publish-allure]
-    if: always() && needs.find-pr-run.outputs.run_id != ''
-
-    permissions:
-      contents: read
-      actions: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download AI analysis (if exists)
-        uses: actions/download-artifact@v4
-        if: needs.find-pr-run.outputs.conclusion == 'failure'
-        with:
-          pattern: ai-analysis-*
-          path: ai-summaries/
-          merge-multiple: true
-          run-id: ${{ needs.find-pr-run.outputs.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
-      - name: Send Telegram notification
-        run: bash .github/scripts/notify-telegram.sh
-        env:
-          # Untrusted values (PR title etc.) travel as env vars, never as
-          # ${{ }} text interpolated straight into the shell script.
-          # E2E_STATUS/API_STATUS both carry the PR run's single overall
-          # conclusion — there's no separate e2e/api result to report here,
-          # the suite already ran once, on the PR.
-          #
-          # This job only ever runs from a pull_request:closed event, so
-          # github.event.pull_request.* is available directly — no need to
-          # thread PR title/SHA/branch through find-pr-run's outputs.
-          E2E_STATUS: ${{ needs.find-pr-run.outputs.conclusion }}
-          API_STATUS: ${{ needs.find-pr-run.outputs.conclusion }}
-          EVENT_NAME: merged
-          PR_NUMBER: ${{ needs.find-pr-run.outputs.pr_number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          REF_NAME: ${{ github.event.pull_request.base.ref }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          REPO_NAME: ${{ github.event.repository.name }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ needs.find-pr-run.outputs.run_id }}
-          COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          AI_SUMMARY_PATH: ai-summaries/ai-analysis-summary.md
-
-  # ─── JOB 8: Cleanup old artifacts ────────────────────────────────────────────
-  #
-  # Lists every job that can upload an artifact — needs: only listing
-  # notify-telegram isn't enough, since on an open/update run it skips almost
-  # instantly (its `if` is false there), and without the rest listed here
-  # cleanup would start racing test-e2e/merge-reports while they're still
-  # uploading.
+  # ─── JOB 5: Cleanup old artifacts ────────────────────────────────────────────
 
   cleanup:
     name: Cleanup Old Artifacts
     runs-on: ubuntu-latest
-    needs: [lint, test-e2e, test-api, risk-analysis, merge-reports, find-pr-run, publish-allure, notify-telegram]
+    needs: [lint, test-e2e, test-api, risk-analysis, merge-reports]
     if: always()
 
     # listWorkflowRunArtifacts/deleteArtifact need the `actions` scope —
