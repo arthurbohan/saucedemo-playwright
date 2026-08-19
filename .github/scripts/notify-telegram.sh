@@ -47,8 +47,6 @@ ALLURE_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/"
 
 if [[ "$EVENT_NAME" == "pull_request" ]]; then
   TRIGGER="PR #${PR_NUMBER}: ${PR_TITLE}"
-elif [[ "$EVENT_NAME" == "merged" ]]; then
-  TRIGGER="Merged PR #${PR_NUMBER}: ${PR_TITLE} → ${REF_NAME}"
 elif [[ "$EVENT_NAME" == "manual" ]]; then
   TRIGGER="Full regression, triggered by ${TRIGGERED_BY:-someone} (${REF_NAME})"
 elif [[ "$EVENT_NAME" == "local" ]]; then
@@ -57,7 +55,32 @@ else
   TRIGGER="Push to ${REF_NAME}"
 fi
 
-MESSAGE="*Playwright Tests — ${STATUS_ICON}*
+# `merged` is a merge announcement, not a fresh test report — pr-checks.yml
+# already had to pass for this push to exist, so there's no Allure report to
+# link (that only gets (re)published from full-regression.yml / npm run
+# regression, on demand) and no separate E2E/API breakdown to show.
+if [[ "$EVENT_NAME" == "merged" ]]; then
+  if [[ "$STATUS_ICON" == "PASSED" ]]; then
+    MESSAGE="*Merged — PR #${PR_NUMBER}*
+
+${PR_TITLE}
+→ ${REF_NAME} · ${COMMIT_SHA}
+
+✅ All required checks passed
+
+🔗 [CI run](${RUN_URL})"
+  else
+    MESSAGE="*Merged — PR #${PR_NUMBER}*
+
+${PR_TITLE}
+→ ${REF_NAME} · ${COMMIT_SHA}
+
+⚠️ pr-checks.yml did not report a clean pass (${E2E_STATUS}) for this commit — possibly a direct push that bypassed review.
+
+🔗 [CI run](${RUN_URL})"
+  fi
+else
+  MESSAGE="*Playwright Tests — ${STATUS_ICON}*
 
 Status: ${STATUS_TEXT}
 Trigger: ${TRIGGER}
@@ -68,8 +91,11 @@ API: ${API_STATUS}
 
 📊 [Allure Report](${ALLURE_URL})
 🔗 [GitHub Actions](${RUN_URL})"
+fi
 
-# Append a short AI-analysis snippet if one was downloaded
+# Append a short AI-analysis snippet if one was downloaded — applies in any
+# context (a failed manual/local regression, or a rare merged-but-failing
+# bypass)
 if [[ -n "${AI_SUMMARY_PATH:-}" && -f "$AI_SUMMARY_PATH" ]]; then
   AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ')
   if [[ -n "$AI_SNIPPET" ]]; then

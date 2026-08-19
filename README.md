@@ -455,18 +455,20 @@ the only place that's decided:
   drop the gate — see [Risk Analysis & Impact-Based Test
   Selection](#-risk-analysis--impact-based-test-selection).
 - **[`on-merge.yml`](.github/workflows/on-merge.yml)** — `on: push` to `main`.
-  Never re-runs tests; reuses `pr-checks.yml`'s artifacts. Deliberately kept
-  on `push` rather than `pull_request: closed` — GitHub's `github-pages`
-  environment only allows deploys from a real branch ref
-  (`refs/heads/main`); `pull_request` events, even on close, always report
-  the ephemeral `refs/pull/N/merge` ref instead and get rejected by that
-  protection rule.
+  Doesn't re-run tests *or* publish a report — a merge only happens once
+  `pr-checks.yml` already passed, so there's nothing new to show. Just a
+  short "PR #N merged, checks were green" Telegram note. Kept on `push`
+  rather than `pull_request: closed` — GitHub's `github-pages` environment
+  (used below, by `full-regression.yml`) only allows deploys from a real
+  branch ref (`refs/heads/main`); `pull_request` events, even on close,
+  always report the ephemeral `refs/pull/N/merge` ref instead.
 - **[`full-regression.yml`](.github/workflows/full-regression.yml)** —
   `on: workflow_dispatch` only, never gates anything. The CI counterpart to
-  `npm run regression` below: runs the whole suite on demand, publishes its
-  own Allure report, sends its own Telegram summary. This is where a heavy
-  suite belongs once it outgrows the PR gate — a safety net you trigger by
-  hand (or, later, on a schedule), decoupled from any single PR.
+  `npm run regression` below, and the *only* place that (re)publishes the
+  Allure report — runs the whole suite fresh, on demand, and sends its own
+  Telegram summary. This is where a heavy suite belongs once it outgrows the
+  PR gate — a safety net you trigger by hand (or, later, on a schedule),
+  decoupled from any single PR.
 
 ### Pipeline overview
 
@@ -480,16 +482,21 @@ pr-checks.yml (on: pull_request)            on-merge.yml (on: push to main)
     │                                          │        code (any merge
     ├── test-api       → required              │        strategy)
     │                                          │
-    ├── risk-analysis  → advisory, never       ├── publish-allure
-    │     blocks (continue-on-error)           │     └── downloads THAT run's
-    │     └── posted/updated as a PR comment   │        allure-results — no
-    │                                          │        fresh test run
-    ├── merge-reports                          │     └── GitHub Pages
-    │     → single Playwright HTML report      │
-    │                                          └── notify-telegram
-    └── cleanup                                      → status + Allure link
-          → deletes this run's old artifacts            + AI snippet, from
-                                                            that same PR run
+    ├── risk-analysis  → advisory, never       └── notify-telegram
+    │     blocks (continue-on-error)                 → "PR #N merged,
+    │     └── posted/updated as a PR comment            checks were green"
+    │                                                   — no report, no
+    ├── merge-reports                                   re-test
+    │     → single Playwright HTML report
+    │
+    └── cleanup
+          → deletes this run's old artifacts
+
+full-regression.yml (on: workflow_dispatch)
+    │
+    ├── test-e2e (4 shards) + test-api  → fresh run, own artifacts
+    ├── publish-allure                  → GitHub Pages (only place this happens)
+    └── notify-telegram                 → full status + Allure link + AI snippet
 ```
 
 `lint`, `test-e2e` and `test-api` are the required checks — the actual merge
@@ -498,9 +505,8 @@ wired into CI at all — see [Risk Analysis & Impact-Based Test
 Selection](#-risk-analysis--impact-based-test-selection) for why.
 
 If `find-pr-run` can't resolve a PR for the push (e.g. someone pushed to
-`main` directly, bypassing review), `publish-allure` and `notify-telegram`
-both no-op rather than guess — see
-[`find-pr-run.js`](.github/scripts/find-pr-run.js).
+`main` directly, bypassing review), `notify-telegram` no-ops rather than
+guess — see [`find-pr-run.js`](.github/scripts/find-pr-run.js).
 
 Want to run the full suite + Allure + Telegram notification on demand?
 `npm run regression` does exactly that locally — see

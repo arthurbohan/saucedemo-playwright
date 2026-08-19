@@ -2,13 +2,12 @@ name: On Merge
 
 # Push-only, separate from pr-checks.yml on purpose: this never re-runs the
 # test suite. It locates the pull_request run that already tested this exact
-# commit (pr-checks.yml, workflow_id below) and reuses its artifacts to
-# publish the Allure report and send a Telegram notification.
-#
-# Kept on `push` rather than `pull_request: closed` — GitHub's github-pages
-# environment only allows deploys from a real branch ref (refs/heads/main);
-# pull_request events, even on close, always report the ephemeral
-# refs/pull/N/merge ref instead and get rejected by that protection rule.
+# commit and sends a short "merged, checks were green" Telegram notification
+# — no Allure publish here. A merge only happens once pr-checks.yml already
+# passed, so re-publishing a report that's guaranteed green adds nothing;
+# the Allure report lives in full-regression.yml / npm run regression
+# instead, where it actually reflects a fresh, specific run someone asked
+# to see.
 
 on:
   push:
@@ -25,11 +24,10 @@ jobs:
 
   # ─── JOB 1: Locate the merged PR's CI run ────────────────────────────────────
   #
-  # Resolves which pr-checks.yml run already tested this exact code, so the
-  # two jobs below can reuse its artifacts instead of re-running the whole
-  # suite a second time on every merge. Works for any merge strategy — uses
-  # GitHub's own commit↔PR tracking, not a SHA/message guess. See
-  # .github/scripts/find-pr-run.js.
+  # Resolves which pr-checks.yml run already tested this exact code — mainly
+  # so notify-telegram below can link back to it and name the PR. Works for
+  # any merge strategy — uses GitHub's own commit↔PR tracking, not a
+  # SHA/message guess. See .github/scripts/find-pr-run.js.
 
   find-pr-run:
     name: Locate merged PR's CI run
@@ -59,80 +57,18 @@ jobs:
             const find = require('./.github/scripts/find-pr-run.js')
             await find({ github, context, core })
 
-  # ─── JOB 2: Publish Allure to GitHub Pages ───────────────────────────────────
+  # ─── JOB 2: Telegram notification ────────────────────────────────────────────
   #
-  # Does NOT re-run tests — downloads allure-results from the PR run that
-  # find-pr-run located above. If that lookup came up empty (direct push, no
-  # associated PR), this just doesn't run.
-
-  publish-allure:
-    name: Publish Allure Report
-    runs-on: ubuntu-latest
-    needs: find-pr-run
-    if: needs.find-pr-run.outputs.run_id != ''
-
-    permissions:
-      contents: read
-      actions: read
-      pages: write
-      id-token: write
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download Allure results from the PR's CI run
-        uses: actions/download-artifact@v4
-        with:
-          pattern: allure-results-*
-          path: allure-results/
-          merge-multiple: true
-          run-id: ${{ needs.find-pr-run.outputs.run_id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Install Allure CLI
-        run: |
-          curl -o allure.tgz -L https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
-          tar -xzf allure.tgz
-          sudo mv allure-2.30.0 /opt/allure
-          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
-
-      - name: Generate Allure report
-        run: allure generate allure-results --clean -o allure-report
-
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: allure-report/
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
-
-  # ─── JOB 3: Telegram notification with AI analysis ───────────────────────────
-  #
-  # Same reasoning as publish-allure — reports on the merge using
-  # find-pr-run's resolved run instead of triggering a fresh test run.
-  # `always()` here (unlike publish-allure above) is deliberate: still notify
-  # even if the Pages deploy itself failed.
+  # A merge announcement, not a fresh test report: pr-checks.yml already had
+  # to pass for this push to exist. The AI-analysis download below only ever
+  # finds something on the rare case find-pr-run resolves a non-success
+  # conclusion (e.g. a direct push bypassing review) — normal merges have
+  # nothing to download there.
 
   notify-telegram:
     name: Telegram Notification
     runs-on: ubuntu-latest
-    needs: [find-pr-run, publish-allure]
+    needs: find-pr-run
     if: always() && needs.find-pr-run.outputs.run_id != ''
 
     permissions:
