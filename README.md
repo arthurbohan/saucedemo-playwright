@@ -434,20 +434,26 @@ regression. `ai:select` stays a local, pre-push convenience command.
 
 ## 🔄 CI/CD — GitHub Actions
 
-Tests run once per change, on the `pull_request` — **not again** on the
-`push` to `main` that a merge produces. The suite is the expensive part
-(sharded browsers, Docker); re-running it a second time for the exact code
-that was just tested is pure waste, so `push` reuses the PR run's artifacts
+Tests run once per change, on `pull_request` open/update — **not again**
+when the PR closes and merges. The suite is the expensive part (sharded
+browsers, Docker); re-running it a second time for the exact code that was
+just tested is pure waste, so the merge event reuses the PR run's artifacts
 instead of re-testing.
+
+The whole pipeline is a single `pull_request` trigger
+(`types: [opened, synchronize, reopened, closed]`) — there's no separate
+`push` trigger to reconcile. On close, the event payload already hands over
+the PR's head SHA and number directly, so finding "which run tested this"
+is a direct lookup, not a guess.
 
 ### Pipeline overview
 
 ```
-pull_request                              push to main (= a PR merged)
+pull_request: opened/synchronize/reopened   pull_request: closed (merged)
     │                                          │
     ├── lint          → required, seconds      ├── find-pr-run
-    │                                          │     └── resolves which PR-run
-    ├── test-e2e (4 shards, Docker)            │        tested this exact code
+    │                                          │     └── looks up the run for
+    ├── test-e2e (4 shards, Docker)            │        this exact head SHA
     │     └── required — the actual gate       │        (any merge strategy)
     │                                          │
     ├── test-api       → required              ├── publish-allure
@@ -467,10 +473,13 @@ gate. `risk-analysis` is advisory only. `ai:select` is deliberately *not*
 wired into CI at all — see [Risk Analysis & Impact-Based Test
 Selection](#-risk-analysis--impact-based-test-selection) for why.
 
-If `find-pr-run` can't resolve a PR for the push (e.g. someone pushed to
-`main` directly, bypassing review), `publish-allure` and `notify-telegram`
-both no-op rather than guess — see
-[`find-pr-run.js`](.github/scripts/find-pr-run.js).
+If `find-pr-run` can't resolve a run for the merged PR (e.g. it closed
+without ever running CI), `publish-allure` and `notify-telegram` both no-op
+rather than guess — see [`find-pr-run.js`](.github/scripts/find-pr-run.js).
+
+Want to run the full suite + Allure + Telegram notification on demand,
+outside of any CI trigger? `npm run regression` does exactly that locally —
+see [`runRegression.sh`](.github/scripts/runRegression.sh).
 
 Notification and cleanup logic lives in `.github/scripts/`, not inline in the
 YAML — `notify-telegram.sh` in particular takes untrusted values (PR title,

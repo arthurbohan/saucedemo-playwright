@@ -22,6 +22,7 @@
     "ai:risk": "npx tsx scripts/analyzeRisk.ts",
     "ai:select": "npx tsx scripts/selectTests.ts",
     "healing:summary": "npx tsx scripts/summarizeHealing.ts",
+    "regression": "bash .github/scripts/runRegression.sh",
     "lint": "eslint ."
   },
   "devDependencies": {
