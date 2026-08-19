@@ -107,6 +107,7 @@ project/
 │   │   └── playwright.yml              CI/CD pipeline
 │   └── scripts/                        Notification/cleanup logic — kept out of the YAML
 │       ├── notify-telegram.sh             Untrusted values arrive via env, never spliced into the script
+│       ├── find-pr-run.js                 push → the PR run that already tested this code
 │       └── cleanup-artifacts.js
 ├── eslint.config.mjs                ← flat config, no-semicolons house style (npm run lint)
 ├── playwright.config.ts
@@ -433,39 +434,43 @@ regression. `ai:select` stays a local, pre-push convenience command.
 
 ## 🔄 CI/CD — GitHub Actions
 
-Tests run automatically on every `push` and `pull_request` to `main`.
+Tests run once per change, on the `pull_request` — **not again** on the
+`push` to `main` that a merge produces. The suite is the expensive part
+(sharded browsers, Docker); re-running it a second time for the exact code
+that was just tested is pure waste, so `push` reuses the PR run's artifacts
+instead of re-testing.
 
 ### Pipeline overview
 
 ```
-push / PR
-    │
-    ├── lint            → npm run lint (required check, no AI, seconds)
-    │
-    ├── test-e2e (4 shards in parallel, Docker)
-    │     ├── Shard 1/4
-    │     ├── Shard 2/4                → always: Self-Healing Summary
-    │     ├── Shard 3/4  → on failure: AI Analysis (Groq)
-    │     └── Shard 4/4
-    │
-    ├── test-api
-    │     └── on failure: AI Analysis (Groq)
-    │
-    ├── risk-analysis   → PR only, advisory (never blocks)
-    │     └── ai:risk against the PR base branch → posted/updated as a PR comment
-    │
-    ├── merge-reports   → single Playwright HTML report
-    │
-    ├── publish-allure  → GitHub Pages
-    │     └── https://<username>.github.io/<repo>/
-    │
-    └── notify-telegram → status + Allure link + AI snippet
+pull_request                              push to main (= a PR merged)
+    │                                          │
+    ├── lint          → required, seconds      ├── find-pr-run
+    │                                          │     └── resolves which PR-run
+    ├── test-e2e (4 shards, Docker)            │        tested this exact code
+    │     └── required — the actual gate       │        (any merge strategy)
+    │                                          │
+    ├── test-api       → required              ├── publish-allure
+    │                                          │     └── downloads THAT run's
+    ├── risk-analysis  → advisory, never       │        allure-results — no
+    │     blocks (continue-on-error)           │        fresh test run
+    │     └── posted/updated as a PR comment   │     └── GitHub Pages
+    │                                          │
+    └── merge-reports                          └── notify-telegram
+          → single Playwright HTML report            → status + Allure link
+                                                         + AI snippet, from
+                                                         that same PR run
 ```
 
-`lint` and `test-e2e`/`test-api` are the required checks. `risk-analysis` is advisory
-only (`continue-on-error: true`) — see [Risk Analysis & Impact-Based Test
-Selection](#-risk-analysis--impact-based-test-selection) for why `ai:select`
-is deliberately *not* wired into CI at all.
+`lint`, `test-e2e` and `test-api` are the required checks — the actual merge
+gate. `risk-analysis` is advisory only. `ai:select` is deliberately *not*
+wired into CI at all — see [Risk Analysis & Impact-Based Test
+Selection](#-risk-analysis--impact-based-test-selection) for why.
+
+If `find-pr-run` can't resolve a PR for the push (e.g. someone pushed to
+`main` directly, bypassing review), `publish-allure` and `notify-telegram`
+both no-op rather than guess — see
+[`find-pr-run.js`](.github/scripts/find-pr-run.js).
 
 Notification and cleanup logic lives in `.github/scripts/`, not inline in the
 YAML — `notify-telegram.sh` in particular takes untrusted values (PR title,
