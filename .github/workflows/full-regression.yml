@@ -1,0 +1,255 @@
+name: Full Regression
+
+# workflow_dispatch-only, on purpose — this is the CI equivalent of
+# `npm run regression` (scripts/../.github/scripts/runRegression.sh), for
+# when the suite outgrows "fast enough to gate every PR on".
+#
+# Not wired into pr-checks.yml or on-merge.yml at all: those two stay a
+# small, fast merge gate (lint + tests + advisory risk analysis) regardless
+# of how large this suite eventually gets — a 1000-test / 20-minute run has
+# no business blocking a PR. This is the safety-net alternative: run the
+# whole thing on demand, publish an Allure report, get a Telegram summary.
+# Nothing here reuses another run's artifacts — it tests fresh and reports
+# on itself.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ─── JOB 1: E2E tests with sharding + Docker ─────────────────────────────────
+  #
+  # Same shape as pr-checks.yml's test-e2e — same container, same sharding.
+  # As the suite grows, this is the job that scales (more shards), not the
+  # trigger model.
+
+  test-e2e:
+    name: E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.0-jammy
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4]
+        shardTotal: [4]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run E2E tests
+        run: npx playwright test --project=sd-e2e --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        env:
+          CI: true
+          PLAYWRIGHT_SKIP_BROWSER_GC: 1
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: AI Analysis of failures
+        if: failure()
+        run: npx tsx scripts/analyzeFailure.ts
+        env:
+          CI: true
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Self-Healing Summary
+        if: always()
+        run: npx tsx scripts/summarizeHealing.ts
+
+      - name: Upload self-healing summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: self-healing-shard-${{ matrix.shardIndex }}
+          path: self-healing-summary.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-shard-${{ matrix.shardIndex }}
+          path: allure-results/
+          retention-days: 1
+
+      - name: Upload AI analysis summary
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ai-analysis-shard-${{ matrix.shardIndex }}
+          path: ai-analysis-summary.md
+          retention-days: 7
+
+      - name: Upload test artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-artifacts-shard-${{ matrix.shardIndex }}
+          path: test-results/
+          retention-days: 7
+
+  # ─── JOB 2: API tests ────────────────────────────────────────────────────────
+
+  test-api:
+    name: API Tests (jsonplaceholder)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run API tests
+        run: npm run test:api
+        env:
+          CI: true
+
+      - name: AI Analysis of failures
+        if: failure()
+        run: npx tsx scripts/analyzeFailure.ts
+        env:
+          CI: true
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Upload AI analysis summary
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ai-analysis-api
+          path: ai-analysis-summary.md
+          retention-days: 7
+
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-api
+          path: allure-results/
+          retention-days: 1
+
+  # ─── JOB 3: Publish Allure to GitHub Pages ───────────────────────────────────
+  #
+  # Downloads THIS run's own artifacts (no cross-run lookup — unlike
+  # on-merge.yml, there's no separate PR run to reuse, this run IS the test
+  # run). Only attempts the deploy when dispatched against main — the
+  # github-pages environment rejects deploys from any other ref anyway.
+
+  publish-allure:
+    name: Publish Allure Report
+    runs-on: ubuntu-latest
+    needs: [test-e2e, test-api]
+    if: always() && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Allure results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results/
+          merge-multiple: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Allure CLI
+        run: |
+          curl -o allure.tgz -L https://github.com/allure-framework/allure2/releases/download/2.30.0/allure-2.30.0.tgz
+          tar -xzf allure.tgz
+          sudo mv allure-2.30.0 /opt/allure
+          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
+
+      - name: Generate Allure report
+        run: allure generate allure-results --clean -o allure-report
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: allure-report/
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+  # ─── JOB 4: Telegram notification ────────────────────────────────────────────
+
+  notify-telegram:
+    name: Telegram Notification
+    runs-on: ubuntu-latest
+    needs: [test-e2e, test-api, publish-allure]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download AI analysis (if exists)
+        uses: actions/download-artifact@v4
+        if: needs.test-e2e.result == 'failure' || needs.test-api.result == 'failure'
+        with:
+          pattern: ai-analysis-*
+          path: ai-summaries/
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Send Telegram notification
+        run: bash .github/scripts/notify-telegram.sh
+        env:
+          # needs.test-e2e.result is per-shard-matrix — 'success' only if
+          # every shard succeeded, same semantics as a single conclusion.
+          E2E_STATUS: ${{ needs.test-e2e.result }}
+          API_STATUS: ${{ needs.test-api.result }}
+          EVENT_NAME: manual
+          TRIGGERED_BY: ${{ github.actor }}
+          PR_NUMBER: ''
+          PR_TITLE: ''
+          REF_NAME: ${{ github.ref_name }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          AI_SUMMARY_PATH: ai-summaries/ai-analysis-summary.md
