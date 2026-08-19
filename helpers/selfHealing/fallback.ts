@@ -57,6 +57,46 @@ export async function generateFallbackSelector(
         }
     }
 
+    // Descriptions without a "for <product>" shape (e.g. "Shopping cart icon
+    // link in the navigation bar") skip the block above entirely — they had
+    // no fallback strategy at all before this. Try matching significant
+    // words from the description against aria-label AND data-test(id) —
+    // icon-only elements (like a cart link with no visible text) often carry
+    // no aria-label at all, but do carry a semantic test id (e.g.
+    // "shopping-cart-link" for a description containing "cart"). Require an
+    // exact single match: an ambiguous fallback is worse than none, since
+    // the caller clicks whatever locator comes back without disambiguating.
+    const STOP_WORDS = new Set(['the', 'and', 'for', 'link', 'button', 'icon', 'field', 'input', 'menu'])
+    const keywords = description
+        .toLowerCase()
+        .split(/\s+/)
+        .map((w) => w.replace(/[^a-z0-9]/g, ''))
+        .filter((w) => w.length > 3 && !STOP_WORDS.has(w))
+
+    // Restricted to clickable tags — a bare attribute selector can pick up a
+    // non-interactive child (e.g. a cart badge <span data-test="cart-badge">
+    // nested inside the actual <a data-test="cart-link">), turning what
+    // should be a unique match into an ambiguous one.
+    const CLICKABLE = ['a', 'button', '[role="button"]', '[role="link"]']
+    for (const word of keywords) {
+        const candidates = [
+            CLICKABLE.map((tag) => `${tag}[aria-label*="${word}" i]`).join(', '),
+            CLICKABLE.map((tag) => `${tag}[data-test*="${word}" i]`).join(', '),
+            CLICKABLE.map((tag) => `${tag}[data-testid*="${word}" i]`).join(', '),
+        ]
+        for (const candidate of candidates) {
+            try {
+                const count = await page.locator(candidate).count()
+                if (count === 1) {
+                    console.warn(`   ✅ Found element by keyword "${word}": ${candidate}`)
+                    return candidate
+                }
+            } catch {
+                // Continue
+            }
+        }
+    }
+
     try {
         const originalSelector = originalLocator.toString()
         const textMatch = originalSelector.match(/text="([^"]+)"/)
