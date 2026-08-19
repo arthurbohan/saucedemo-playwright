@@ -7,9 +7,9 @@
  * suite a second time.
  *
  * Uses listPullRequestsAssociatedWithCommit — GitHub's own tracked
- * commit↔PR association — rather than guessing from the commit message or
- * comparing SHAs, so it works for every merge strategy (merge commit,
- * squash, rebase), not just "Create a merge commit".
+ * commit↔PR association — rather than guessing from the commit message, so
+ * it works for every merge strategy (merge commit, squash, rebase), not
+ * just "Create a merge commit".
  *
  * Invoked from playwright.yml via actions/github-script:
  *   script: |
@@ -44,9 +44,12 @@ module.exports = async ({ github, context, core }) => {
     per_page: 30,
   })
 
-  const match = runs.workflow_runs.find((run) =>
-    run.pull_requests.some((p) => p.number === merged.number)
-  )
+  // Match by head SHA, not run.pull_requests — GitHub empties that array
+  // retroactively once a PR closes (documented behavior: it only lists PRs
+  // that are still open at the time of the API call), and by the time this
+  // runs the PR is always already merged/closed. head_sha is a plain commit
+  // SHA comparison and doesn't have that problem.
+  const match = runs.workflow_runs.find((run) => run.head_sha === merged.head.sha)
 
   if (!match) {
     core.warning(`Found merged PR #${merged.number} but no completed pull_request run for it — skipping artifact reuse.`)
