@@ -100,8 +100,8 @@ project/
 │   ├── generateTests.ts                AI test-case generation (ai:generate)
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
 │   ├── selectTests.ts                  Impact-based regression selection (ai:select)
-│   ├── summarizeHealing.ts             Self-healing audit report (healing:summary)
-│   └── mergeHealingSummary.ts          Merge per-shard healing logs into one (healing:merge, CI-only)
+│   └── summarizeHealing.ts             Self-healing audit report (healing:summary); with a
+│                                        directory arg, merges per-shard logs into one (CI-only)
 │
 ├── .github/
 │   ├── workflows/
@@ -356,7 +356,8 @@ Output — `self-healing-summary.md`:
 `test-e2e` shards each write their own log independently — without
 combining them, "did anything get healed this run" would mean opening 4
 separate per-shard job summaries. `merge-healing-summary` downloads every
-shard's raw log, merges them with `npm run healing:merge`, and posts *one*
+shard's raw log and runs `summarizeHealing.ts` with a directory argument
+(instead of its default single-log mode) to merge them, then posts *one*
 report as a sticky PR comment (`marocchino/sticky-pull-request-comment`,
 same mechanism as `risk-analysis`, own comment/header so the two don't
 collide) — updated in place on every push, not a new comment each time.

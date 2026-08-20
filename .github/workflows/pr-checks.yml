@@ -350,7 +350,7 @@ jobs:
           if-no-artifact-found: ignore
 
       - name: Merge into one summary
-        run: npm run healing:merge -- self-healing-logs
+        run: npx tsx scripts/summarizeHealing.ts self-healing-logs
 
       # Updates the same comment on every push instead of spamming a new
       # one, same as risk-analysis. Always runs — a "no healing this run"
