@@ -101,9 +101,21 @@ fi
 # generic snippet for analyses that predate that section (e.g. a cache hit
 # from before this prompt existed).
 if [[ -n "${AI_SUMMARY_PATH:-}" && -f "$AI_SUMMARY_PATH" ]]; then
-  AI_SNIPPET=$(sed -n '/^## 🧭 Manual Tester Verdict$/,/^---$/p' "$AI_SUMMARY_PATH" | sed '1d;$d' | grep -v "^$")
+  # Each grep below legitimately finds nothing when its section is absent
+  # (that IS the "try the next fallback" signal) — grep exits 1 on no
+  # match, and under set -euo pipefail that would kill the whole script
+  # right here instead of falling through, so every attempt is `|| true`.
+  AI_SNIPPET=$(sed -n '/^## 🧭 Manual Tester Verdict$/,/^---$/p' "$AI_SUMMARY_PATH" | sed '1d;$d' | grep -v "^$" || true)
   if [[ -z "$AI_SNIPPET" ]]; then
-    AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ')
+    # No rollup section — a single-failure report skips it (see
+    # reporter.ts) since it would just repeat the one Detailed Analysis
+    # entry's own verdict back to back. Pull that verdict directly instead
+    # of falling through to a blind first-lines grab, which would pick up
+    # the Summary stats (already shown elsewhere in this message) first.
+    AI_SNIPPET=$(sed -n '/^## Manual Verdict$/,/^## /p' "$AI_SUMMARY_PATH" | sed '1d;$d' | grep -v "^$" || true)
+  fi
+  if [[ -z "$AI_SNIPPET" ]]; then
+    AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ' || true)
   fi
   if [[ -n "$AI_SNIPPET" ]]; then
     MESSAGE="${MESSAGE}

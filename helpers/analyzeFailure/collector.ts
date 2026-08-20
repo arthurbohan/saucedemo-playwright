@@ -70,14 +70,7 @@ export class FailureCollector {
 
         try {
             const content = fs.readFileSync(filePath, 'utf-8')
-            const testName = parentDirName
-                .replace(/-chromium$/, '')
-                .replace(/-webkit$/, '')
-                .replace(/-firefox$/, '')
-                .replace(/-electron$/, '')
-                .replace(/-retry\d*$/, '')
-                .replace(/-/g, ' ')
-                .trim()
+            const testName = this.extractTestName(content) ?? this.testNameFromDirName(parentDirName)
 
             return {
                 filePath,
@@ -88,6 +81,37 @@ export class FailureCollector {
             this.logger.error(`Failed to parse failure file: ${filePath}`)
             return null
         }
+    }
+
+    /**
+     * error-context.md's own "# Test info" section has the full, untruncated
+     * test name (file >> describe >> test). The test-results/ directory name
+     * is lossy: Playwright truncates it and splices in a short hash when the
+     * full title would make the path too long — e.g.
+     * "zzzDemoFailure-DEMO-intent-c046d-e-shows-an-impossible-count-sd-e2e"
+     * for a test actually named "DEMO — cart badge shows an impossible
+     * count" — which read straight into every report meant for human eyes,
+     * manual testers included.
+     */
+    private extractTestName(content: string): string | null {
+        const match = content.match(/^- Name:\s*(.+)$/m)
+        if (!match) return null
+
+        // "file.spec.ts >> describe >> test" → "describe > test" — the file
+        // path is redundant with FailureInfo.filePath already
+        const parts = match[1].split('>>').map(part => part.trim())
+        return parts.length > 1 ? parts.slice(1).join(' > ') : parts[0]
+    }
+
+    private testNameFromDirName(parentDirName: string): string {
+        return parentDirName
+            .replace(/-chromium$/, '')
+            .replace(/-webkit$/, '')
+            .replace(/-firefox$/, '')
+            .replace(/-electron$/, '')
+            .replace(/-retry\d*$/, '')
+            .replace(/-/g, ' ')
+            .trim()
     }
 
     /**
