@@ -90,14 +90,19 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_GC: 1
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
-      # Runs only when tests fail — analyzes root cause via Groq API
-      # Results appear as a collapsible group in GitHub Actions logs
+      # Runs only when tests fail — analyzes root cause via Groq API, for
+      # whoever fixes the automation. SKIP_MANUAL_VERDICT: no Telegram job
+      # reads this here anyway (see on-merge.yml), so the manual-tester
+      # verdict section — meant for full-regression.yml's audience — is
+      # skipped rather than generated and never shown to anyone.
+      # Results appear as a collapsible group in GitHub Actions logs.
       - name: AI Analysis of failures
         if: failure()
         run: npx tsx scripts/analyzeFailure.ts
         env:
           CI: true
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SKIP_MANUAL_VERDICT: true
 
       # Always runs — a healed locator can pass, so this isn't gated on failure()
       # like the AI failure analysis above. Surfaces which tests only passed
@@ -178,6 +183,7 @@ jobs:
         env:
           CI: true
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SKIP_MANUAL_VERDICT: true
 
       - name: Upload AI analysis summary
         uses: actions/upload-artifact@v4

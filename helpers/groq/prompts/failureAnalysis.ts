@@ -9,8 +9,15 @@ Be concise and precise. Focus only on the test failure analysis.
 
 export function buildFailureAnalysisPrompt(
     testName: string,
-    errorContext: string
+    errorContext: string,
+    includeManualVerdict = true
 ): string {
+    const manualVerdictSection = includeManualVerdict ? `
+## Manual Verdict
+(exactly one of: "🔴 Product bug" / "🟡 Test or environment issue" / "🟠 Unclear — needs a human look")
+(one plain-language sentence why — no code, no jargon, written for a manual tester deciding whether to file a bug report)
+` : ''
+
     return `
 You are an experienced QA automation engineer. Analyze the failed Playwright test below.
 
@@ -20,11 +27,7 @@ error-context.md contents:
 ${errorContext}
 
 Respond STRICTLY in this format:
-
-## Manual Verdict
-(exactly one of: "🔴 Product bug" / "🟡 Test or environment issue" / "🟠 Unclear — needs a human look")
-(one plain-language sentence why — no code, no jargon, written for a manual tester deciding whether to file a bug report)
-
+${manualVerdictSection}
 ## Root Cause
 (1-2 sentences — exactly what went wrong)
 
@@ -83,7 +86,10 @@ Provide a comprehensive analysis:
     return prompt
 }
 
-export function buildBatchAnalysisPrompt(failures: Array<{ testName: string; errorContext: string }>): string {
+export function buildBatchAnalysisPrompt(
+    failures: Array<{ testName: string; errorContext: string }>,
+    includeManualVerdict = true
+): string {
     let prompt = `
 You are an experienced QA automation engineer. Analyze these failed Playwright tests.
 
@@ -99,14 +105,16 @@ Error: ${failure.errorContext.slice(0, 500)}
 `
     })
 
+    const manualVerdictLine = includeManualVerdict
+        ? '\n### Manual Verdict\n(exactly one of: "🔴 Product bug" / "🟡 Test or environment issue" / "🟠 Unclear — needs a human look", then one plain-language sentence why — written for a manual tester, no code)'
+        : ''
+
     prompt += `
 
 For each failure, provide:
 
 ${failures.map((_, i) => `
-## Failure ${i + 1}: ${failures[i].testName}
-### Manual Verdict
-(exactly one of: "🔴 Product bug" / "🟡 Test or environment issue" / "🟠 Unclear — needs a human look", then one plain-language sentence why — written for a manual tester, no code)
+## Failure ${i + 1}: ${failures[i].testName}${manualVerdictLine}
 ### Root Cause
 ### Location
 ### Fix

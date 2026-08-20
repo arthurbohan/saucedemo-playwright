@@ -13,6 +13,7 @@ export const DEFAULT_CONFIG: Required<AnalyzeConfig> = {
     outputDir: process.cwd(),
     deduplicate: true,
     useCache: true,
+    includeManualVerdict: true,
 }
 
 export const SYSTEM_PROMPTS = {
