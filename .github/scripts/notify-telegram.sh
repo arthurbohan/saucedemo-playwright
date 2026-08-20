@@ -103,6 +103,14 @@ fi
 if [[ -n "${AI_SUMMARY_PATH:-}" && -f "$AI_SUMMARY_PATH" ]]; then
   AI_SNIPPET=$(sed -n '/^## 🧭 Manual Tester Verdict$/,/^---$/p' "$AI_SUMMARY_PATH" | sed '1d;$d' | grep -v "^$")
   if [[ -z "$AI_SNIPPET" ]]; then
+    # No rollup section — a single-failure report skips it (see
+    # reporter.ts) since it would just repeat the one Detailed Analysis
+    # entry's own verdict back to back. Pull that verdict directly instead
+    # of falling through to a blind first-lines grab, which would pick up
+    # the Summary stats (already shown elsewhere in this message) first.
+    AI_SNIPPET=$(sed -n '/^## Manual Verdict$/,/^## /p' "$AI_SUMMARY_PATH" | sed '1d;$d' | grep -v "^$")
+  fi
+  if [[ -z "$AI_SNIPPET" ]]; then
     AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ')
   fi
   if [[ -n "$AI_SNIPPET" ]]; then

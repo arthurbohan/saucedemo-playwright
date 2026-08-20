@@ -64,7 +64,11 @@ export class Reporter {
             .map(r => ({ testName: r.testName, verdict: this.extractManualVerdict(r.analysis) }))
             .filter((v): v is { testName: string; verdict: string } => v.verdict !== null)
 
-        if (verdicts.length > 0) {
+        // A single failure's own Detailed Analysis section already opens
+        // with its Manual Verdict — a one-line rollup above it would just
+        // repeat that same sentence back to back. The rollup earns its
+        // place once there's more than one result to scan at a glance.
+        if (verdicts.length > 1) {
             lines.push('## 🧭 Manual Tester Verdict')
             lines.push('')
             for (const v of verdicts) {
