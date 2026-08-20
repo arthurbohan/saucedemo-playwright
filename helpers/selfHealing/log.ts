@@ -46,10 +46,23 @@ export function logHealingEvent(entry: HealingLogEntry): void {
 }
 
 export function readHealingLog(): HealingLogEntry[] {
-    if (!fs.existsSync(LOG_FILE)) return []
+    return parseHealingLogFile(LOG_FILE)
+}
+
+/**
+ * Reads and merges several shard-local JSONL logs into one entry list — for
+ * combining test-e2e's per-shard self-healing logs into a single PR-wide
+ * summary after the fact. See scripts/mergeHealingSummary.ts.
+ */
+export function readHealingLogsFromFiles(filePaths: string[]): HealingLogEntry[] {
+    return filePaths.flatMap(parseHealingLogFile)
+}
+
+function parseHealingLogFile(filePath: string): HealingLogEntry[] {
+    if (!fs.existsSync(filePath)) return []
 
     return fs
-        .readFileSync(LOG_FILE, 'utf-8')
+        .readFileSync(filePath, 'utf-8')
         .split('\n')
         .filter(Boolean)
         .map(line => {

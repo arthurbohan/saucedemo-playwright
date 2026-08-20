@@ -100,7 +100,8 @@ project/
 │   ├── generateTests.ts                AI test-case generation (ai:generate)
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
 │   ├── selectTests.ts                  Impact-based regression selection (ai:select)
-│   └── summarizeHealing.ts             Self-healing audit report (healing:summary)
+│   ├── summarizeHealing.ts             Self-healing audit report (healing:summary)
+│   └── mergeHealingSummary.ts          Merge per-shard healing logs into one (healing:merge, CI-only)
 │
 ├── .github/
 │   ├── workflows/
@@ -349,6 +350,16 @@ Output — `self-healing-summary.md`:
 ## ❌ Could not heal
 | Test | Description | Original selector |
 ```
+
+### In CI: posted on the PR, not buried in a job summary
+
+`test-e2e` shards each write their own log independently — without
+combining them, "did anything get healed this run" would mean opening 4
+separate per-shard job summaries. `merge-healing-summary` downloads every
+shard's raw log, merges them with `npm run healing:merge`, and posts *one*
+report as a sticky PR comment (`marocchino/sticky-pull-request-comment`,
+same mechanism as `risk-analysis`, own comment/header so the two don't
+collide) — updated in place on every push, not a new comment each time.
 
 In CI this runs after every E2E shard (`if: always()` — a healed test can
 still pass, so this isn't gated on failure), and the artifact is retained
