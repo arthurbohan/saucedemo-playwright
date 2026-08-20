@@ -58,6 +58,23 @@ export class Reporter {
 
         lines.push('---')
         lines.push('')
+
+        const verdicts = results
+            .filter(r => !r.error)
+            .map(r => ({ testName: r.testName, verdict: this.extractManualVerdict(r.analysis) }))
+            .filter((v): v is { testName: string; verdict: string } => v.verdict !== null)
+
+        if (verdicts.length > 0) {
+            lines.push('## 🧭 Manual Tester Verdict')
+            lines.push('')
+            for (const v of verdicts) {
+                lines.push(`- **${this.escapeMarkdown(v.testName)}** — ${v.verdict}`)
+            }
+            lines.push('')
+            lines.push('---')
+            lines.push('')
+        }
+
         lines.push('## Detailed Analysis')
         lines.push('')
 
@@ -128,6 +145,35 @@ export class Reporter {
         }
 
         return cleaned
+    }
+
+    /**
+     * Pull the "## Manual Verdict" / "### Manual Verdict" section out of a
+     * per-failure analysis and collapse it to one line, for the rollup
+     * section and for notify-telegram.sh's snippet. Returns null for
+     * analyses that predate this section (e.g. a 7-day-old cache hit from
+     * before this prompt existed) — callers should just omit those rather
+     * than show a blank line.
+     *
+     * Batch-mode analyses share one full response across every result in
+     * the batch (see FailureAnalyzer.analyzeBatch), so this always matches
+     * the first "Manual Verdict" in the text — accurate for the common
+     * single/few-failure case, approximate once failures.length crosses
+     * batchThreshold.
+     */
+    private extractManualVerdict(analysis: string): string | null {
+        const match = analysis.match(/#{2,3}\s*Manual Verdict\s*\n+([\s\S]*?)(?=\n#{2,3}\s|\n---|$)/i)
+        if (!match) {
+            return null
+        }
+
+        const text = match[1]
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+            .join(' — ')
+
+        return text || null
     }
 
     /**
