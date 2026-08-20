@@ -8,4 +8,9 @@ test.describe('DEMO: intentional failure for AI analysis', () => {
     const count = await inventoryPage.getCartCount()
     expect(count).toBe(999)
   })
+
+  test('DEMO — inventory shows the wrong number of products', async ({ inventoryPage }) => {
+    const names = await inventoryPage.getItemNames()
+    expect(names).toHaveLength(3)
+  })
 })
