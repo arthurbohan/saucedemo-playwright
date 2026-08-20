@@ -6,13 +6,52 @@
  * just adds irrelevant noise for whichever domain isn't being generated.
  */
 
+import fs from 'fs'
+import path from 'path'
 import type { FeatureKey } from '../../generateTests/types'
 import { API_FEATURES } from '../../generateTests/types'
 
-export const GENERATE_TESTS_SYSTEM =
-    'You are a QA automation engineer. Return only TypeScript code. No explanation, no markdown.'
+// The Page Object layer's method list used to be paraphrased by hand here —
+// which drifts the moment a method's signature or behavior changes and
+// nobody remembers to update the prompt too. Reading the real files instead
+// means the model always sees the actual current API, including any
+// JSDoc gotchas (composite-method warnings etc.) written on the methods
+// themselves — see tests/pages/checkoutPage.ts's fillShippingInfo() for an
+// example of exactly that.
+//
+// Scoped per feature, not "all six files every time" — this account's Groq
+// tier caps requests at 8000 TPM, and the full set alone runs ~9800 tokens
+// before the feature description or completion budget. Each hand-written
+// spec only ever imports the Page Objects it actually needs (see e.g.
+// checkout.spec.ts importing CartPage alongside CheckoutPage for the
+// cancel-returns-to-cart case) — this mirrors that.
+const PAGE_OBJECT_FILES_BY_UI_FEATURE: Record<string, string[]> = {
+    login: ['tests/pages/basePage.ts', 'tests/pages/loginPage.ts'],
+    inventory: ['tests/pages/basePage.ts', 'tests/pages/inventoryPage.ts'],
+    checkout: [
+        'tests/pages/basePage.ts',
+        'tests/pages/checkoutPage.ts',
+        'tests/pages/cartPage.ts',
+        'tests/builders/shippingInfo.builder.ts',
+    ],
+}
 
-const SYSTEM_CONTEXT_UI = `
+function readPageObjectSource(feature: FeatureKey): string {
+    const files = PAGE_OBJECT_FILES_BY_UI_FEATURE[feature] ?? []
+
+    return files
+        .map(relativePath => {
+            const content = fs.readFileSync(path.join(process.cwd(), relativePath), 'utf-8')
+            return `// ─── ${relativePath} ───\n${content.trim()}`
+        })
+        .join('\n\n')
+}
+
+export const GENERATE_TESTS_SYSTEM =
+    'You are a QA automation engineer. Return only TypeScript code. No explanation, no markdown. No semicolons at the end of statements — this project\'s house style omits them.'
+
+function buildSystemContextUI(feature: FeatureKey): string {
+    return `
 You are an expert QA automation engineer. Write Playwright tests in TypeScript.
 
 PROJECT ARCHITECTURE:
@@ -70,88 +109,24 @@ FIXTURES:
 - filledCartPage → CartPage,       logged in, backpack + bike light in cart
 - checkoutPage   → CheckoutPage,   logged in, backpack in cart, on /checkout-step-one.html
 
-PAGE OBJECT METHODS AND LOCATORS:
+PAGE OBJECT SOURCE — this is the real, current code, not a paraphrase. Every
+locator, every method signature, every JSDoc warning above a method (read
+those — they call out composite methods and other easy mistakes) is exactly
+what exists right now. Do not call anything not shown here.
 
-LoginPage:
-  Locators: .usernameInput, .passwordInput, .loginButton, .errorMessage, .errorDismiss
-            .credentialsHint, .passwordHint
-  Methods:  .goto(), .login(user, pass), .loginAs(user: SauceUser)
-            .getErrorText(), .dismissError(), .isErrorVisible()
-            .loginHealed(user, pass), .loginAsHealed(user)
-  SauceUser values: 'standard_user' | 'locked_out_user' | 'problem_user' | 'performance_glitch_user'
-
-InventoryPage:
-  Locators: .inventoryList, .inventoryItems, .cartBadge, .cartIcon
-            .sortDropdown, .pageTitle, .burgerMenu, .openedBurgerMenu
-            .addToCartBtn(slug), .removeBtn(slug)
-            .itemByName(name) → Locator for the WHOLE .inventory_item card
-              (image + name + description + price + button) — its innerText()
-              contains all of that, not just the product name. To assert just
-              the name, use .getItemNames() (below) and check the array/index.
-  Methods:  .goto(), .addToCart(slug), .removeFromCart(slug)
-            .sortBy(option), .goToCart(), .openBurgerMenu(), .logout()
-            .getItemNames() → Promise<string[]>
-            .getItemPrices() → Promise<number[]>  (already parsed floats, e.g. 29.99 — NOT "$29.99")
-            .getCartCount() → Promise<number>
-            .addToCartHealed(slug), .removeFromCartHealed(slug)
-            .sortByHealed(option), .goToCartHealed()
-
-  ⚠️ .logout() already calls openBurgerMenu() internally before clicking
-  Logout — it is a complete action, not just the click. Never call
-  .openBurgerMenu() yourself right before .logout(): the burger icon is a
-  toggle, so opening it twice closes the menu again mid-click and the test
-  times out waiting for an element that just slid out of view. Only call
-  .openBurgerMenu() on its own when the test's purpose IS verifying the menu
-  opens (assert .openedBurgerMenu is visible) and it does NOT then log out.
-
-CartPage:
-  Locators: .cartItems, .itemNames, .itemPrices, .itemQuantities
-            .checkoutButton, .continueShoppingButton, .removeItemBtn(name)
-            (.itemNames and .itemPrices are Locator getters — no parens, no await;
-             for the resolved string[]/number[] use the methods below instead)
-  Methods:  .goto(), .getItemCount() → Promise<number>
-            .getItemNames() → Promise<string[]>
-            .getItemPrices() → Promise<number[]>  (parsed floats, e.g. 29.99 — NOT "$29.99")
-            .removeItem(name), .checkout(), .continueShopping(), .isEmpty() → Promise<boolean>
-            .checkoutHealed(), .continueShoppingHealed()
-
-CheckoutPage:
-  Locators: .firstNameInput, .lastNameInput, .postalCodeInput
-            .continueButton, .cancelButton, .errorMessage
-            .summaryItems, .summarySubtotal, .summaryTax, .summaryTotal
-            .finishButton, .successHeader, .successText, .backHomeButton
-  Methods:  .goto(), .fillShippingInfo(info)
-            .getSummaryTotal() → Promise<number>  (parsed float, e.g. 32.42 — NOT "Total: $32.42";
-              for the raw label text use .getTextOf(checkoutPage.summaryTotal) instead)
-            .finish(), .isOrderComplete() → Promise<boolean>, .backToProducts()
-            .fillShippingInfoHealed(info), .getSummaryTotalHealed() → Promise<number>  (same as above)
-            .finishHealed(), .backToProductsHealed()
-            .getTextOf(locator) → Promise<string>   ← from BasePage, use for raw label text
-
-  ⚠️ fillShippingInfo(info) / fillShippingInfoHealed(info) fill ALL THREE
-  fields, click continueButton, AND wait for navigation to step-two — it is
-  a complete action, not just a fill. Never call .continueButton.click()
-  again after it (double-click bug). And NEVER use it for a validation-error
-  test: with an empty field there is no navigation to step-two, so the
-  internal waitForURL() will hang until the test times out.
-
-  For validation-error / empty-field scenarios, fill each input yourself and
-  click continueButton once:
-  \`\`\`typescript
-  const data = new ShippingInfoBuilder().withEmptyFirstName().build()
-  await checkoutPage.firstNameInput.fill(data.firstName)
-  await checkoutPage.lastNameInput.fill(data.lastName)
-  await checkoutPage.postalCodeInput.fill(data.postalCode)
-  await checkoutPage.continueButton.click()
-  await expect(checkoutPage.errorMessage).toContainText('First Name is required')
-  \`\`\`
-
-ShippingInfoBuilder (checkout spec only):
-  new ShippingInfoBuilder().build()
-  new ShippingInfoBuilder().withFirstName(v).build()
-  new ShippingInfoBuilder().withEmptyFirstName().build()
-  new ShippingInfoBuilder().withEmptyLastName().build()
-  new ShippingInfoBuilder().withEmptyPostalCode().build()
+${readPageObjectSource(feature)}
+${feature === 'checkout' ? `
+For validation-error / empty-field scenarios on CheckoutPage, fill each
+input yourself and click continueButton once instead of calling
+fillShippingInfo (see its JSDoc above for why):
+\`\`\`typescript
+const data = new ShippingInfoBuilder().withEmptyFirstName().build()
+await checkoutPage.firstNameInput.fill(data.firstName)
+await checkoutPage.lastNameInput.fill(data.lastName)
+await checkoutPage.postalCodeInput.fill(data.postalCode)
+await checkoutPage.continueButton.click()
+await expect(checkoutPage.errorMessage).toContainText('First Name is required')
+\`\`\`` : ''}
 
 ASSERTIONS — CORRECT USAGE:
 \`\`\`typescript
@@ -185,11 +160,15 @@ STRICT RULES:
 11. Test names in English
 12. Return ONLY TypeScript code — no markdown fences, no explanation
 13. Start immediately with import lines
-14. Locator getters (no parentheses in their definition, e.g. \`get itemNames()\`) are accessed as properties — never call them like a function (❌ \`cartPage.itemNames()\`, ✅ \`cartPage.itemNames\`)
+14. A \`get x()\` in the source above is a getter, not a method — access it as \`cartPage.x\`, never \`cartPage.x()\`
 15. Always import types (SauceUser, ShippingInfo, ProductSlug, SortOption) from the barrel '../../pages', never from a specific page file
-16. Several Page Object methods are COMPOSITE — they already perform a full multi-step action end-to-end (e.g. fillShippingInfo/fillShippingInfoHealed fill+submit+wait for navigation; logout() opens the burger menu then clicks Logout). Read each method's one-line behavior below before calling it, and never manually repeat a sub-step (a click, a menu toggle, a wait) that the method you're calling already does internally
+16. Some Page Object methods are COMPOSITE (their JSDoc says so) — they already perform a full multi-step action end-to-end. Read a method's JSDoc before calling it, and never manually repeat a sub-step it already does internally
 17. Don't add an \`as Type\` cast when passing a string literal to a parameter already typed as that union (e.g. \`loginAsHealed('standard_user')\` needs no cast and no SauceUser import at all — TS infers it) — only import a type when you actually declare a variable with it
+18. NO SEMICOLONS anywhere — this project's house style (eslint \`semi: ['error', 'never']\`) omits them at the end of every statement, same as every hand-written spec in this repo
+19. Only destructure the fixtures a test actually uses in its body (e.g. \`{ checkoutPage, cartPage, page }\`) — an unused one isn't just dead code here, fixtures like cartPage/checkoutPage NAVIGATE during setup, so requesting one you don't need can leave the page on the wrong URL before your test even starts
+20. If a composite method's JSDoc says it already performs some step internally (opening a menu, submitting a form, etc.), never perform that same step yourself right before calling it — for a toggle (like the burger menu), doing so undoes it instead of being harmless. If a test's whole point is verifying that intermediate step on its own (e.g. "menu opens"), write it as its own separate test that does NOT also then call the composite method
 `.trim()
+}
 
 const SYSTEM_CONTEXT_API = `
 You are an expert QA automation engineer. Write Playwright API tests in TypeScript.
@@ -254,12 +233,13 @@ STRICT RULES:
 7. Remember write operations (POST/PUT/PATCH/DELETE) are simulated by jsonplaceholder — assert on the response status/shape it returns, never assume the change persists across a later GET
 8. Return ONLY TypeScript code — no markdown fences, no explanation
 9. Start immediately with import lines
+10. NO SEMICOLONS anywhere — this project's house style (eslint \`semi: ['error', 'never']\`) omits them at the end of every statement
 `.trim()
 
 export function buildGeneratePrompt(feature: FeatureKey, description: string): string {
     const systemContext = (API_FEATURES as readonly string[]).includes(feature)
         ? SYSTEM_CONTEXT_API
-        : SYSTEM_CONTEXT_UI
+        : buildSystemContextUI(feature)
 
     return `${systemContext}
 
@@ -271,4 +251,25 @@ ${description}
 Remember:
 - Only import what this spec actually needs
 - Do not invent non-existent methods, fixtures, or fields`
+}
+
+// Feeds scripts/generateTests.ts's fix-and-retry loop — a generation that
+// typechecks clean on the first attempt never reaches this. Deliberately
+// scoped to "fix these specific errors," not "regenerate from scratch":
+// most of the file is already correct, and a fresh generation risks
+// introducing a new, different mistake instead of just fixing this one.
+export function buildFixTestPrompt(code: string, tscErrors: string): string {
+    return `
+The Playwright spec below was generated for this project but has TypeScript
+errors. Fix ONLY what the errors below require — do not rewrite parts of the
+file the errors don't mention, and do not change test behavior otherwise.
+
+GENERATED CODE:
+${code}
+
+TYPESCRIPT ERRORS:
+${tscErrors}
+
+Return the complete corrected file. No markdown fences, no explanation —
+start immediately with the import lines.`.trim()
 }

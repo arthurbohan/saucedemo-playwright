@@ -17,7 +17,7 @@ const SLUG_NAMES: Record<ProductSlug, string> = {
     'sauce-labs-bolt-t-shirt': 'Sauce Labs Bolt T-Shirt',
     'sauce-labs-fleece-jacket': 'Sauce Labs Fleece Jacket',
     'sauce-labs-onesie': 'Sauce Labs Onesie',
-    'test.allthethings()-t-shirt-(red)': 'Test AllTheThings T-Shirt (Red)',
+    'test.allthethings()-t-shirt-(red)': 'Test.allTheThings() T-Shirt (Red)',
 }
 
 const SORT_LABELS: Record<SortOption, string> = {
@@ -53,6 +53,9 @@ export class InventoryPage extends BasePage {
         return this.page.getByTestId(`remove-${slug}`)
     }
 
+    /** Returns the WHOLE .inventory_item card (image + name + description +
+     *  price + button), not just the product name — its innerText() contains
+     *  all of that. To assert just the name, use getItemNames() instead. */
     itemByName(name: string) {
         return this.page.locator('.inventory_item').filter({ hasText: name })
     }
@@ -100,6 +103,15 @@ export class InventoryPage extends BasePage {
         await this.openedBurgerMenu.waitFor({ state: 'visible' })
     }
 
+    /**
+     * COMPOSITE: already calls openBurgerMenu() internally before clicking
+     * Logout. Never call openBurgerMenu() yourself right before this — the
+     * burger icon is a toggle, so opening it twice closes the menu again
+     * mid-click and the test times out waiting for an element that just
+     * slid out of view. Only call openBurgerMenu() on its own when the
+     * test's purpose IS verifying the menu opens (assert openedBurgerMenu
+     * is visible) and it does NOT then log out.
+     */
     async logout() {
         await this.openBurgerMenu()
         await this.page.getByTestId('logout-sidebar-link').click()

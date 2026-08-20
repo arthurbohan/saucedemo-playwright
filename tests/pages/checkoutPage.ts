@@ -18,6 +18,8 @@ export class CheckoutPage extends BasePage {
   get lastNameInput() { return this.page.getByTestId('lastName') }
   get postalCodeInput() { return this.page.getByTestId('postalCode') }
   get continueButton() { return this.page.getByTestId('continue') }
+
+  /** On this (step-two review) page, navigates to /inventory.html — NOT /cart.html. */
   get cancelButton() { return this.page.getByTestId('cancel') }
   get errorMessage() { return this.page.getByTestId('error') }
 
@@ -41,6 +43,14 @@ export class CheckoutPage extends BasePage {
     await this.page.goto('/checkout-step-one.html')
   }
 
+  /**
+   * COMPOSITE: fills all three fields, clicks continueButton, AND waits for
+   * navigation to step-two — a complete action, not just a fill. Never call
+   * continueButton.click() again right after this (double-click bug). Don't
+   * use this for a validation-error test either: with an empty field there
+   * is no navigation, so the waitForURL() below hangs until the test times
+   * out — fill each input yourself and click continueButton once instead.
+   */
   async fillShippingInfo(info: ShippingInfo) {
     await this.firstNameInput.fill(info.firstName)
     await this.lastNameInput.fill(info.lastName)
@@ -70,6 +80,7 @@ export class CheckoutPage extends BasePage {
 
   // ── Self-healing methods — use BasePage wrappers ──────────────
 
+  /** COMPOSITE — same behavior/caveats as fillShippingInfo() above, healed. */
   async fillShippingInfoHealed(info: ShippingInfo) {
     await this.fillHealed(this.firstNameInput, info.firstName, 'First Name input field')
     await this.fillHealed(this.lastNameInput, info.lastName, 'Last Name input field')

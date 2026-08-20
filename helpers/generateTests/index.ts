@@ -5,7 +5,8 @@
  * Entry point used by scripts/generateTests.ts.
  */
 
-export { generateSpec }          from './generator'
+export { generateSpec, fixSpec } from './generator'
 export { saveGeneratedSpec, previewCode } from './writer'
+export { typeCheckFile }         from './validator'
 export { FEATURE_DESCRIPTIONS }  from './features'
 export type { FeatureKey, GenerateResult } from './types'

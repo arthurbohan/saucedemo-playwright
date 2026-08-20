@@ -1,11 +1,15 @@
 import 'dotenv/config'
 import {
     generateSpec,
+    fixSpec,
     saveGeneratedSpec,
     previewCode,
+    typeCheckFile,
     FEATURE_DESCRIPTIONS,
     type FeatureKey,
 } from '../helpers/generateTests/index'
+
+const MAX_FIX_ATTEMPTS = 2
 
 function isFeatureKey(value: string): value is FeatureKey {
     return value in FEATURE_DESCRIPTIONS
@@ -28,8 +32,27 @@ async function main() {
 
     for (const feature of features) {
         console.log(`\nGenerating: ${feature}`)
-        const code = await generateSpec(feature, FEATURE_DESCRIPTIONS[feature])
-        const filePath = saveGeneratedSpec(feature, code)
+        let code = await generateSpec(feature, FEATURE_DESCRIPTIONS[feature])
+        let filePath = saveGeneratedSpec(feature, code)
+
+        let attempt = 0
+        let result = typeCheckFile(filePath)
+        while (!result.ok && attempt < MAX_FIX_ATTEMPTS) {
+            attempt++
+            console.log(`  Type errors found — asking Groq to fix (attempt ${attempt}/${MAX_FIX_ATTEMPTS}):`)
+            console.log(result.errors)
+            code = await fixSpec(code, result.errors)
+            filePath = saveGeneratedSpec(feature, code)
+            result = typeCheckFile(filePath)
+        }
+
+        if (!result.ok) {
+            console.error(`  ⚠️  Still has type errors after ${MAX_FIX_ATTEMPTS} fix attempt(s) — review manually:`)
+            console.error(result.errors)
+        } else if (attempt > 0) {
+            console.log(`  ✅ Fixed after ${attempt} attempt(s)`)
+        }
+
         console.log(`Saved: ${filePath}`)
         console.log(previewCode(code))
     }
