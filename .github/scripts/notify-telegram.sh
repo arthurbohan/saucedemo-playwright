@@ -95,9 +95,16 @@ fi
 
 # Append a short AI-analysis snippet if one was downloaded — applies in any
 # context (a failed manual/local regression, or a rare merged-but-failing
-# bypass)
+# bypass). Prefer the "Manual Tester Verdict" rollup (product bug vs
+# test/environment issue, plain language, no code) over a blind first-lines
+# grab — it's written for exactly this audience. Falls back to the old
+# generic snippet for analyses that predate that section (e.g. a cache hit
+# from before this prompt existed).
 if [[ -n "${AI_SUMMARY_PATH:-}" && -f "$AI_SUMMARY_PATH" ]]; then
-  AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ')
+  AI_SNIPPET=$(sed -n '/^## 🧭 Manual Tester Verdict$/,/^---$/p' "$AI_SUMMARY_PATH" | sed '1d;$d' | grep -v "^$")
+  if [[ -z "$AI_SNIPPET" ]]; then
+    AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ')
+  fi
   if [[ -n "$AI_SNIPPET" ]]; then
     MESSAGE="${MESSAGE}
 

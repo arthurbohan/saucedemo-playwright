@@ -21,6 +21,10 @@ ${errorContext}
 
 Respond STRICTLY in this format:
 
+## Manual Verdict
+(exactly one of: "🔴 Product bug" / "🟡 Test or environment issue" / "🟠 Unclear — needs a human look")
+(one plain-language sentence why — no code, no jargon, written for a manual tester deciding whether to file a bug report)
+
 ## Root Cause
 (1-2 sentences — exactly what went wrong)
 
@@ -101,6 +105,8 @@ For each failure, provide:
 
 ${failures.map((_, i) => `
 ## Failure ${i + 1}: ${failures[i].testName}
+### Manual Verdict
+(exactly one of: "🔴 Product bug" / "🟡 Test or environment issue" / "🟠 Unclear — needs a human look", then one plain-language sentence why — written for a manual tester, no code)
 ### Root Cause
 ### Location
 ### Fix

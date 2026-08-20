@@ -275,6 +275,11 @@ in GitHub Actions logs:
 
 ```
 ▶ AI Analysis: checkout flow — full purchase cycle
+  ## Manual Verdict
+  🔴 Product bug
+  The order confirmation never appeared after a valid checkout — this
+  looks like a real defect, not a flaky test.
+
   ## Root Cause
   The test expected "Thank you for your order!" but the page never
   reached /checkout-complete.html — the Finish button was not clickable.
@@ -290,6 +295,20 @@ in GitHub Actions logs:
   await expect(checkoutPage.finishButton).toBeVisible()
   await checkoutPage.finish()
 ```
+
+### Manual Verdict: a second audience for the same analysis
+
+`Root Cause`/`Location`/`Fix`/`Code` is written for whoever maintains the
+automation — useless to a manual tester deciding whether a red run is worth
+filing a bug for. Every analysis leads with a `Manual Verdict` instead,
+answering that one question in plain language, no code: **🔴 product bug**,
+**🟡 test/environment issue** (locator drift, timing, flaky infra — not a
+defect), or **🟠 unclear, needs a human look**.
+
+`ai-analysis-summary.md` rolls every failure's verdict up into its own
+section near the top, and `notify-telegram.sh` pulls *that* — not a blind
+first-lines grab — into the Telegram message, so the verdict is the first
+thing anyone sees without opening GitHub Actions at all.
 
 ---
 
