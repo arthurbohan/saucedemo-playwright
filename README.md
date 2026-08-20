@@ -403,6 +403,19 @@ quality bar (e.g. they deliberately exercise both the healed and non-healed
 path of every interaction, which a generated first draft won't think to do
 without being told).
 
+### Self-correcting on type errors
+
+A generation can ignore an instruction that's already spelled out in the
+prompt — e.g. importing `ShippingInfoBuilder` from `'../../pages'` when the
+prompt explicitly says `'../../builders'`. Rather than leave that for a
+human to catch, `scripts/generateTests.ts` typechecks the file it just wrote
+(`helpers/generateTests/validator.ts`, scoped to that file's `tsc` output)
+and, on failure, sends the exact errors back to Groq for a targeted fix —
+up to 2 attempts before it gives up and says so. This only catches
+compiler-visible mistakes, not wrong assumptions about app behavior the
+prompt never documented (that class of bug still needs a human to notice
+and add the missing fact to the prompt, same as any other spec gap).
+
 ---
 
 ## 🎯 Risk Analysis & Impact-Based Test Selection

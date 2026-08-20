@@ -118,6 +118,8 @@ CartPage:
 CheckoutPage:
   Locators: .firstNameInput, .lastNameInput, .postalCodeInput
             .continueButton, .cancelButton, .errorMessage
+            (.cancelButton on the step-two review page navigates to
+             /inventory.html, NOT /cart.html — do not assume otherwise)
             .summaryItems, .summarySubtotal, .summaryTax, .summaryTotal
             .finishButton, .successHeader, .successText, .backHomeButton
   Methods:  .goto(), .fillShippingInfo(info)
@@ -271,4 +273,25 @@ ${description}
 Remember:
 - Only import what this spec actually needs
 - Do not invent non-existent methods, fixtures, or fields`
+}
+
+// Feeds scripts/generateTests.ts's fix-and-retry loop — a generation that
+// typechecks clean on the first attempt never reaches this. Deliberately
+// scoped to "fix these specific errors," not "regenerate from scratch":
+// most of the file is already correct, and a fresh generation risks
+// introducing a new, different mistake instead of just fixing this one.
+export function buildFixTestPrompt(code: string, tscErrors: string): string {
+    return `
+The Playwright spec below was generated for this project but has TypeScript
+errors. Fix ONLY what the errors below require — do not rewrite parts of the
+file the errors don't mention, and do not change test behavior otherwise.
+
+GENERATED CODE:
+${code}
+
+TYPESCRIPT ERRORS:
+${tscErrors}
+
+Return the complete corrected file. No markdown fences, no explanation —
+start immediately with the import lines.`.trim()
 }
