@@ -19,6 +19,7 @@
     "ai:generate:inventory": "npx tsx scripts/generateTests.ts inventory",
     "ai:generate:checkout": "npx tsx scripts/generateTests.ts checkout",
     "ai:generate:api": "npx tsx scripts/generateTests.ts api",
+    "ai:generate:live": "npx tsx scripts/generateFromLivePage.ts",
     "ai:risk": "npx tsx scripts/analyzeRisk.ts",
     "ai:select": "npx tsx scripts/selectTests.ts",
     "healing:summary": "npx tsx scripts/summarizeHealing.ts",

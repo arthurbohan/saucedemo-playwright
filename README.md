@@ -98,6 +98,7 @@ project/
 ├── scripts/                         ← CLI entry points (thin wrappers around helpers/)
 │   ├── analyzeFailure.ts               AI root-cause analysis of failed tests (ai:analyze)
 │   ├── generateTests.ts                AI test-case generation (ai:generate)
+│   ├── generateFromLivePage.ts          Generate for any URL, no Page Object needed (ai:generate:live)
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
 │   ├── selectTests.ts                  Impact-based regression selection (ai:select)
 │   └── summarizeHealing.ts             Self-healing audit report (healing:summary); with a
@@ -415,6 +416,34 @@ up to 2 attempts before it gives up and says so. This only catches
 compiler-visible mistakes, not wrong assumptions about app behavior the
 prompt never documented (that class of bug still needs a human to notice
 and add the missing fact to the prompt, same as any other spec gap).
+
+### Generating for a page with no Page Object at all
+
+`ai:generate` above only works because this project's entire Page Object
+layer is spelled out by hand in its prompt — it can't generate anything for
+a page it has no description of. `scripts/generateFromLivePage.ts` is a
+different tool for that case: it visits a URL live, captures a real
+accessibility snapshot (`helpers/selfHealing/snapshot.ts` — the same
+mechanism self-healing already uses to find elements at runtime), and asks
+Groq to write a self-contained spec from that snapshot alone — no Page
+Object, no fixtures, nothing this project needs to already know about the
+target.
+
+```bash
+npm run ai:generate:live -- <url> "<task description>"
+```
+
+Verified against three unrelated pages with three different interaction
+patterns — a login form with redirects, unlabeled checkboxes, and
+dynamically added/removed elements — all three generated tests passed
+against the live site on the first attempt, no fixes needed.
+
+This is a draft-generation tool, not a replacement for `ai:generate`:
+useful the moment you're pointed at a page with no suite yet, disposable
+once one exists. On a real project, the natural next step past this is
+Claude with Playwright MCP directly — it drives the browser the same way,
+but already knows the project's context from the codebase itself, with no
+prompt to hand-author at all.
 
 ---
 
