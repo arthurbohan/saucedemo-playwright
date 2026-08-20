@@ -8,7 +8,7 @@ import type { HealingConfig } from './types'
 export type { HealResult, HealingConfig, HealMethod } from './types'
 export type { GroqResponse, GroqOptions } from '../groq/types'
 
-export { logHealingEvent, readHealingLog } from './log'
+export { logHealingEvent, readHealingLog, readHealingLogsFromFiles } from './log'
 export type { HealingLogEntry } from './log'
 export { saveHealingSummary } from './reporter'
 
