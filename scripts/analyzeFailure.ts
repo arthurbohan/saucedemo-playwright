@@ -48,6 +48,10 @@ async function main() {
     }
 
     // 3. Analyze unique failures
+    // SKIP_MANUAL_VERDICT=true drops the manual-tester "Manual Verdict"
+    // section — pr-checks.yml sets this; full-regression.yml and local runs
+    // (npm run ai:analyze / npm run regression) leave it unset, so the
+    // verdict is included by default.
     const analyzer = createAnalyzer({
         batchThreshold: DEFAULT_CONFIG.batchThreshold,
         batchMaxTokens: DEFAULT_CONFIG.batchMaxTokens,
@@ -56,6 +60,7 @@ async function main() {
         delayBetweenRequests: DEFAULT_CONFIG.delayBetweenRequests,
         deduplicate: true,
         useCache: true,
+        includeManualVerdict: process.env.SKIP_MANUAL_VERDICT !== 'true',
     })
 
     const results = await analyzer.analyzeAll(failures, groqClient)

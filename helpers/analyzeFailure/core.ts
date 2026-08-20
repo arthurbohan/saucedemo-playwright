@@ -34,7 +34,7 @@ export class FailureAnalyzer {
         // Check cache first
         if (this.config.useCache) {
             for (const failure of failures) {
-                const cached = this.cache.get(failure.testName, failure.content)
+                const cached = this.cache.get(this.cacheKey(failure.testName), failure.content)
                 if (cached) {
                     results.push({
                         testName: failure.testName,
@@ -88,9 +88,10 @@ export class FailureAnalyzer {
 
         try {
             const { buildBatchAnalysisPrompt } = await import('../groq/prompts')
-            
+
             const batchPrompt = buildBatchAnalysisPrompt(
-                failures.map(f => ({ testName: f.testName, errorContext: f.content }))
+                failures.map(f => ({ testName: f.testName, errorContext: f.content })),
+                this.config.includeManualVerdict
             )
 
             const analysis = await groqClient.ask(
@@ -110,7 +111,7 @@ export class FailureAnalyzer {
                 }
 
                 if (this.config.useCache) {
-                    this.cache.set(failure.testName, failure.content, result.analysis)
+                    this.cache.set(this.cacheKey(failure.testName), failure.content, result.analysis)
                 }
 
                 results.push(result)
@@ -142,12 +143,12 @@ export class FailureAnalyzer {
 
             try {
                 const { buildFailureAnalysisPrompt } = await import('../groq/prompts')
-                const prompt = buildFailureAnalysisPrompt(failure.testName, failure.content)
+                const prompt = buildFailureAnalysisPrompt(failure.testName, failure.content, this.config.includeManualVerdict)
 
                 const analysis = await groqClient.ask(
                     prompt,
                     SYSTEM_PROMPTS.INDIVIDUAL,
-                    { 
+                    {
                         maxTokens: this.config.individualMaxTokens,
                         temperature: this.config.temperature,
                     }
@@ -156,7 +157,7 @@ export class FailureAnalyzer {
                 const result = { testName: failure.testName, analysis }
 
                 if (this.config.useCache) {
-                    this.cache.set(failure.testName, failure.content, analysis)
+                    this.cache.set(this.cacheKey(failure.testName), failure.content, analysis)
                 }
 
                 results.push(result)
@@ -179,6 +180,20 @@ export class FailureAnalyzer {
         }
 
         return results
+    }
+
+    /**
+     * A cache entry from a run with includeManualVerdict=true isn't a valid
+     * answer for a run with it false, and vice versa — the response shape
+     * differs. Keying by testName alone (as the cache's own API takes)
+     * would let pr-checks.yml's no-verdict analysis get served back to
+     * full-regression.yml for the same failure within the cache's 7-day
+     * window, silently dropping the verdict section — or the reverse,
+     * leaking a Manual Verdict into a pr-checks.yml report. Suffixing the
+     * key keeps the two variants from ever answering for each other.
+     */
+    private cacheKey(testName: string): string {
+        return this.config.includeManualVerdict ? testName : `${testName}::no-manual-verdict`
     }
 
     /**
