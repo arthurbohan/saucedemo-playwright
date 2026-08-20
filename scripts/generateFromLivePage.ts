@@ -34,6 +34,7 @@ import { chromium } from '@playwright/test'
 import fs from 'fs'
 import path from 'path'
 import { getGroqClient } from '../helpers/groq/client'
+import { GENERATE_TESTS_SYSTEM } from '../helpers/groq/prompts/generateTests'
 import { getPageSnapshot, getInteractiveElements } from '../helpers/selfHealing/snapshot'
 
 function buildPrompt(url: string, task: string, snapshot: string, elements: string): string {
@@ -65,7 +66,9 @@ RULES:
 4. Do not reference any Page Object, fixture, or helper file — this page has
    none, everything must be self-contained in this one file
 5. Cover the happy path and any failure/edge cases the task describes
-6. Return ONLY TypeScript code — no markdown fences, no explanation, start
+6. NO SEMICOLONS anywhere — this project's house style (eslint
+   \`semi: ['error', 'never']\`) omits them at the end of every statement
+7. Return ONLY TypeScript code — no markdown fences, no explanation, start
    immediately with the import line
 `.trim()
 }
@@ -104,7 +107,7 @@ async function main() {
     const prompt = buildPrompt(url, task, snapshot, elements)
     const code = await client.ask(
         prompt,
-        'You are a QA automation engineer. Return only TypeScript code. No explanation, no markdown.',
+        GENERATE_TESTS_SYSTEM,
         { temperature: 0.1, maxTokens: 2000 }
     )
 

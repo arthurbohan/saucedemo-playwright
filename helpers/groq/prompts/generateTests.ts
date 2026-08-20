@@ -10,7 +10,7 @@ import type { FeatureKey } from '../../generateTests/types'
 import { API_FEATURES } from '../../generateTests/types'
 
 export const GENERATE_TESTS_SYSTEM =
-    'You are a QA automation engineer. Return only TypeScript code. No explanation, no markdown.'
+    'You are a QA automation engineer. Return only TypeScript code. No explanation, no markdown. No semicolons at the end of statements — this project\'s house style omits them.'
 
 const SYSTEM_CONTEXT_UI = `
 You are an expert QA automation engineer. Write Playwright tests in TypeScript.
@@ -191,6 +191,7 @@ STRICT RULES:
 15. Always import types (SauceUser, ShippingInfo, ProductSlug, SortOption) from the barrel '../../pages', never from a specific page file
 16. Several Page Object methods are COMPOSITE — they already perform a full multi-step action end-to-end (e.g. fillShippingInfo/fillShippingInfoHealed fill+submit+wait for navigation; logout() opens the burger menu then clicks Logout). Read each method's one-line behavior below before calling it, and never manually repeat a sub-step (a click, a menu toggle, a wait) that the method you're calling already does internally
 17. Don't add an \`as Type\` cast when passing a string literal to a parameter already typed as that union (e.g. \`loginAsHealed('standard_user')\` needs no cast and no SauceUser import at all — TS infers it) — only import a type when you actually declare a variable with it
+18. NO SEMICOLONS anywhere — this project's house style (eslint \`semi: ['error', 'never']\`) omits them at the end of every statement, same as every hand-written spec in this repo
 `.trim()
 
 const SYSTEM_CONTEXT_API = `
@@ -256,6 +257,7 @@ STRICT RULES:
 7. Remember write operations (POST/PUT/PATCH/DELETE) are simulated by jsonplaceholder — assert on the response status/shape it returns, never assume the change persists across a later GET
 8. Return ONLY TypeScript code — no markdown fences, no explanation
 9. Start immediately with import lines
+10. NO SEMICOLONS anywhere — this project's house style (eslint \`semi: ['error', 'never']\`) omits them at the end of every statement
 `.trim()
 
 export function buildGeneratePrompt(feature: FeatureKey, description: string): string {
