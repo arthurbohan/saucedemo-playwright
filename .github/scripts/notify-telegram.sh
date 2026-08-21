@@ -79,6 +79,21 @@ ${PR_TITLE}
 
 🔗 [CI run](${RUN_URL})"
   fi
+elif [[ "$EVENT_NAME" == "local" ]]; then
+  # No CI run to link to, and the public Allure URL is whatever was last
+  # published (a merge or a CI full-regression run) - showing it here would
+  # read as this run's report when it is not. runRegression.sh already
+  # opens the real one (npm run allure:open) right after this fires.
+  MESSAGE="*Playwright Tests — ${STATUS_ICON}*
+
+Status: ${STATUS_TEXT}
+Trigger: ${TRIGGER}
+Commit: ${COMMIT_SHA}
+
+E2E: ${E2E_STATUS}
+API: ${API_STATUS}
+
+📄 Full report: allure-report/index.html (opened locally)"
 else
   MESSAGE="*Playwright Tests — ${STATUS_ICON}*
 
@@ -118,11 +133,16 @@ if [[ -n "${AI_SUMMARY_PATH:-}" && -f "$AI_SUMMARY_PATH" ]]; then
     AI_SNIPPET=$(grep -v "^#\|^---\|^$" "$AI_SUMMARY_PATH" | head -5 | tr '\n' ' ' || true)
   fi
   if [[ -n "$AI_SNIPPET" ]]; then
+    if [[ "$EVENT_NAME" == "local" ]]; then
+      DETAIL_HINT="full analysis in ${AI_SUMMARY_PATH}"
+    else
+      DETAIL_HINT="full analysis available in GitHub Actions logs"
+    fi
     MESSAGE="${MESSAGE}
 
 AI Analysis (brief):
 ${AI_SNIPPET}
-(full analysis available in GitHub Actions logs)"
+(${DETAIL_HINT})"
   fi
 fi
 
