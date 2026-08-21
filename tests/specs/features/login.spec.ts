@@ -35,7 +35,7 @@ test.describe('Login page', () => {
 
     test.describe('Successful login', () => {
 
-        test('standard_user goes to /inventory.html', async ({ loginPage, page }) => {
+        test('standard_user goes to /inventory.html', { tag: '@smoke' }, async ({ loginPage, page }) => {
             await loginPage.loginAs('standard_user')
             await expect(page).toHaveURL(/inventory/)
         })

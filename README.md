@@ -106,7 +106,7 @@ project/
 │
 ├── .github/
 │   ├── workflows/
-│   │   ├── pr-checks.yml               on: pull_request — lint/test-e2e/test-api/risk-analysis
+│   │   ├── pr-checks.yml               on: pull_request — lint + @smoke gate + risk-analysis
 │   │   ├── on-merge.yml                on: push to main — publish-allure/notify-telegram, no re-test
 │   │   └── full-regression.yml         on: workflow_dispatch — heavy suite, never gates a PR
 │   └── scripts/                        Notification/cleanup logic — kept out of the YAML
@@ -354,14 +354,14 @@ Output — `self-healing-summary.md`:
 
 ### In CI: posted on the PR, not buried in a job summary
 
-`test-e2e` shards each write their own log independently — without
-combining them, "did anything get healed this run" would mean opening 4
-separate per-shard job summaries. `merge-healing-summary` downloads every
-shard's raw log and runs `summarizeHealing.ts` with a directory argument
-(instead of its default single-log mode) to merge them, then posts *one*
-report as a sticky PR comment (`marocchino/sticky-pull-request-comment`,
-same mechanism as `risk-analysis`, own comment/header so the two don't
-collide) — updated in place on every push, not a new comment each time.
+`test-e2e-smoke` posts its own log straight from `summarizeHealing.ts` as a
+sticky PR comment (`marocchino/sticky-pull-request-comment`, same mechanism
+as `risk-analysis`, own comment/header so the two don't collide) — updated
+in place on every push, not a new comment each time. `full-regression.yml`
+has no PR to comment on (`workflow_dispatch`, not PR-triggered), so its
+sharded run just uploads each shard's summary as an artifact instead —
+`summarizeHealing.ts`'s directory-argument mode exists for exactly this
+case, when someone wants one merged view across shards after the fact.
 
 In CI this runs after every E2E shard (`if: always()` — a healed test can
 still pass, so this isn't gated on failure), and the artifact is retained
@@ -511,8 +511,6 @@ regression. `ai:select` stays a local, pre-push convenience command.
 ## 🔄 CI/CD — GitHub Actions
 
 Tests run once per change, on the PR — **not again** when it merges. The
-suite is the expensive part (sharded browsers, Docker); re-running it a
-second time for the exact code that was just tested is pure waste, so the
 merge reuses the PR run's artifacts instead of re-testing.
 
 This is three separate workflow files, each with its own trigger, rather
@@ -521,12 +519,16 @@ every job — a job belongs to exactly one pipeline, and its file's trigger is
 the only place that's decided:
 
 - **[`pr-checks.yml`](.github/workflows/pr-checks.yml)** — `on: pull_request`.
-  The merge gate. Deliberately stays small and fast regardless of how large
-  the suite gets — a 1000-test/20-minute suite has no business blocking
-  every PR. If the suite ever grows past "fast enough to gate on entirely",
-  the fix is to gate on an impact-selected subset (`ai:select`) here, not to
-  drop the gate — see [Risk Analysis & Impact-Based Test
-  Selection](#-risk-analysis--impact-based-test-selection).
+  The merge gate — but only a **smoke subset**, tests tagged `@smoke` (one
+  per critical flow: login, add-to-cart, cart navigation, a full checkout,
+  an API CRUD chain), not the whole suite. Two reasons, not just speed: this
+  repo tests a third-party app it doesn't control (saucedemo.com,
+  jsonplaceholder), so an unrelated outage there would otherwise block every
+  PR the same way — smaller gate surface, less exposure. The full suite
+  still runs, just not as a PR gate — see `full-regression.yml` below. (A
+  known, real trade-off: some regressions that a full PR-gate run would
+  catch are now only caught by `full-regression.yml`, not on every PR — that
+  was the deliberate call here, not an oversight.)
 - **[`on-merge.yml`](.github/workflows/on-merge.yml)** — `on: push` to `main`.
   Doesn't re-run tests *or* publish a report — a merge only happens once
   `pr-checks.yml` already passed, so there's nothing new to show. Just a
@@ -548,34 +550,37 @@ the only place that's decided:
 ```
 pr-checks.yml (on: pull_request)            on-merge.yml (on: push to main)
     │                                          │
-    ├── lint          → required, seconds      ├── find-pr-run
+    ├── lint            → required, seconds    ├── find-pr-run
     │                                          │     └── resolves which
-    ├── test-e2e (4 shards, Docker)            │        pr-checks.yml run
-    │     └── required — the actual gate       │        tested this exact
-    │                                          │        code (any merge
-    ├── test-api       → required              │        strategy)
+    ├── test-e2e-smoke  → required, @smoke     │        pr-checks.yml run
+    │     └── the actual gate, ~5 tests        │        tested this exact
+    │     └── posts self-healing summary       │        code (any merge
+    │          as a PR comment                 │        strategy)
     │                                          │
-    ├── risk-analysis  → advisory, never       └── notify-telegram
-    │     blocks (continue-on-error)                 → "PR #N merged,
-    │     └── posted/updated as a PR comment            checks were green"
-    │                                                   — no report, no
-    ├── merge-reports                                   re-test
-    │     → single Playwright HTML report
+    ├── test-api-smoke  → required, @smoke     └── notify-telegram
+    │                                                → "PR #N merged,
+    ├── risk-analysis  → advisory, never             checks were green"
+    │     blocks (continue-on-error)                 — no report, no
+    │     └── posted/updated as a PR comment          re-test
     │
     └── cleanup
           → deletes this run's old artifacts
 
 full-regression.yml (on: workflow_dispatch)
     │
-    ├── test-e2e (4 shards) + test-api  → fresh run, own artifacts
+    ├── test-e2e (4 shards) + test-api  → the FULL suite, fresh run
     ├── publish-allure                  → GitHub Pages (only place this happens)
     └── notify-telegram                 → full status + Allure link + AI snippet
 ```
 
-`lint`, `test-e2e` and `test-api` are the required checks — the actual merge
-gate. `risk-analysis` is advisory only. `ai:select` is deliberately *not*
-wired into CI at all — see [Risk Analysis & Impact-Based Test
-Selection](#-risk-analysis--impact-based-test-selection) for why.
+`lint`, `test-e2e-smoke` and `test-api-smoke` are the required checks — the
+actual merge gate, scoped to tests tagged `@smoke`
+(`npx playwright test --grep @smoke`). `risk-analysis` is advisory only.
+`ai:select` is deliberately *not* wired into CI at all — see [Risk Analysis
+& Impact-Based Test Selection](#-risk-analysis--impact-based-test-selection)
+for why (in short: this repo's shared fixture barrel means most changes
+already touch nearly every spec, so import-graph selection wouldn't narrow
+much here — a fixed `@smoke` tag set was the more honest fit).
 
 If `find-pr-run` can't resolve a PR for the push (e.g. someone pushed to
 `main` directly, bypassing review), `notify-telegram` no-ops rather than

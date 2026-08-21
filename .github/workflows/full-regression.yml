@@ -22,9 +22,9 @@ jobs:
 
   # ─── JOB 1: E2E tests with sharding + Docker ─────────────────────────────────
   #
-  # Same shape as pr-checks.yml's test-e2e — same container, same sharding.
-  # As the suite grows, this is the job that scales (more shards), not the
-  # trigger model.
+  # The full suite, sharded — unlike pr-checks.yml's test-e2e-smoke, which
+  # only runs the @smoke-tagged subset as the actual PR gate. As the suite
+  # grows, this is the job that scales (more shards), not the trigger model.
 
   test-e2e:
     name: E2E Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
