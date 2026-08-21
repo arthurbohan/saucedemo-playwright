@@ -162,7 +162,7 @@ test.describe('Checkout flow', () => {
 
     test.describe('Full E2E: add → buy → return', () => {
 
-        test('full purchase cycle with random shipping data', async ({ inventoryPage, page }) => {
+        test('full purchase cycle with random shipping data', { tag: '@smoke' }, async ({ inventoryPage, page }) => {
             const shipping: ShippingInfo = new ShippingInfoBuilder().build()
 
             await inventoryPage.addToCart('sauce-labs-backpack')

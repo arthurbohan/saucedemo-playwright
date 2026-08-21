@@ -232,7 +232,7 @@ test.describe('DELETE: resources deletion', () => {
 
 test.describe('Chain of requests — full CRUD cycle', () => {
 
-  test('builder: create → get → update → delete', async ({ apiClient }) => {
+  test('builder: create → get → update → delete', { tag: '@smoke' }, async ({ apiClient }) => {
     // 1. CREATE
     const createPayload = new PostBuilder().withUserId(1).build()
 

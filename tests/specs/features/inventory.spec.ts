@@ -100,7 +100,7 @@ test.describe('Inventory page', () => {
             await expect(inventoryPage.cartBadge).not.toBeVisible()
         })
 
-        test('add backpack → badge = 1', async ({ inventoryPage }) => {
+        test('add backpack → badge = 1', { tag: '@smoke' }, async ({ inventoryPage }) => {
             await inventoryPage.addToCart('sauce-labs-backpack')
             expect(await inventoryPage.getCartCount()).toBe(1)
         })
@@ -150,7 +150,7 @@ test.describe('Inventory page', () => {
 
     test.describe('Navigation', () => {
 
-        test('cart icon goes to /cart.html', async ({ inventoryPage, page }) => {
+        test('cart icon goes to /cart.html', { tag: '@smoke' }, async ({ inventoryPage, page }) => {
             await inventoryPage.goToCart()
             await expect(page).toHaveURL(/cart/)
         })
