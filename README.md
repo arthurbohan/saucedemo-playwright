@@ -1,5 +1,9 @@
 # Saucedemo — Playwright Test Automation Framework
 
+AI-augmented QA project — risk analysis, test generation, self-healing
+locators, and AI failure analysis all run for real in this repo's CI, not
+as demo stubs.
+
 A production-style test automation framework built with Playwright and TypeScript,
 covering UI end-to-end tests for [saucedemo.com](https://www.saucedemo.com)
 and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.typicode.com).
