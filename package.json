@@ -8,6 +8,7 @@
     "test:api": "playwright test --project=jp-api",
     "test:generated": "playwright test --project=sd-e2e-generated",
     "test:generated:api": "playwright test --project=jp-api-generated",
+    "test:rabbit-hole": "docker compose -f rabbit-hole-e2e/docker-compose.yml up --build --abort-on-container-exit --exit-code-from tests",
     "report:pw": "playwright show-report",
     "allure:gen": "allure generate allure-results --clean -o allure-report",
     "allure:open": "allure open allure-report",
