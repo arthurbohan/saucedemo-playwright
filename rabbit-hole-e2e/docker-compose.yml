@@ -1,0 +1,41 @@
+services:
+  app:
+    build:
+      # Cross-repo on purpose: rabbit hole is a separate local repo, not a
+      # subfolder of this one. Docker build contexts can point anywhere on
+      # disk — no need to vendor or submodule the other repo's source.
+      context: "../../rabbit hole"
+    # No host port mapping — the `tests` service reaches this over the
+    # Compose-internal network (http://app:3000), and publishing 3000 to
+    # the host isn't needed for that. Also avoids clashing with a locally
+    # running `npm run server:dev` on the same port.
+    environment:
+      PORT: "3000"
+      # The app only needs this to sign session cookies — Gemini/Google
+      # calls are mocked at the Playwright network layer in every test
+      # (see rabbit-hole-e2e/tests/helpers/), so the real app never sees
+      # those requests and never needs real API keys to run here.
+      SESSION_SECRET: "local-docker-test-secret-not-for-production"
+
+  tests:
+    # Same version pinned in package.json's @playwright/test and already
+    # used by this repo's own CI (.github/workflows/pr-checks.yml) —
+    # mismatched npm-package vs. browser-image versions is a classic
+    # source of confusing failures.
+    image: mcr.microsoft.com/playwright:v1.61.0-jammy
+    working_dir: /work
+    # The whole productstore repo, not just this subfolder — this project
+    # reuses the root @playwright/test install and playwright.config.ts's
+    # `rabbit-hole` project entry rather than keeping a second, separate
+    # package.json in sync.
+    volumes:
+      - "..:/work"
+    environment:
+      RABBIT_HOLE_BASE_URL: "http://app:3000"
+      CI: "true"
+    depends_on:
+      - app
+    command: >
+      sh -c "npm ci &&
+             npx wait-on http://app:3000 --timeout 60000 &&
+             npx playwright test --project=rabbit-hole"
