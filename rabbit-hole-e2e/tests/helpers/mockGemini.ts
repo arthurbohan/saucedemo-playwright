@@ -1,4 +1,8 @@
-export const DEFAULT_BRANCHES = [
+import { Page, Route } from '@playwright/test'
+
+export type Branch = { relation: string, name: string, why: string, track: string }
+
+export const DEFAULT_BRANCHES: Branch[] = [
   { relation: 'ANCESTOR', name: 'Ancestor Artist', why: 'Influenced the sound', track: 'Ancestor Artist — Origin (1975)' },
   { relation: 'CONTEMPORARY', name: 'Contemporary Artist', why: 'Same era, same scene', track: 'Contemporary Artist — Parallel (1998)' },
   { relation: 'MUTATION', name: 'Mutation Artist', why: 'Twisted the formula', track: 'Mutation Artist — Warp (2003)' },
@@ -6,7 +10,7 @@ export const DEFAULT_BRANCHES = [
   { relation: 'INHERITOR', name: 'Inheritor Artist', why: 'Carries the torch forward', track: 'Inheritor Artist — Legacy (2021)' },
 ]
 
-async function fulfillCompleted(route, text) {
+async function fulfillCompleted(route: Route, text: string) {
   // A same-tick fulfill can let React batch the loading=true and
   // loading=false renders together, so tests asserting on the loading
   // indicator (getByTestId('loading')) never observe it. A short delay
@@ -28,7 +32,7 @@ async function fulfillCompleted(route, text) {
 // actually asked for gets echoed back as node.name, so callers don't need
 // to pre-register a response per artist — this also makes "surprise me"
 // (random seed, not chosen by the test) work without special-casing.
-export async function mockGemini(page, { branches = DEFAULT_BRANCHES, deepText = 'This links back through a shared rhythmic approach and studio technique.' } = {}) {
+export async function mockGemini(page: Page, { branches = DEFAULT_BRANCHES, deepText = 'This links back through a shared rhythmic approach and studio technique.' }: { branches?: Branch[], deepText?: string } = {}) {
   await page.route('**/api/gemini/v1beta/interactions', async (route) => {
     const body = route.request().postDataJSON()
     const prompt = body?.input || ''
@@ -47,7 +51,7 @@ export async function mockGemini(page, { branches = DEFAULT_BRANCHES, deepText =
   })
 }
 
-export async function mockGeminiFailure(page, { status = 500 } = {}) {
+export async function mockGeminiFailure(page: Page, { status = 500 }: { status?: number } = {}) {
   await page.route('**/api/gemini/v1beta/interactions', (route) =>
     route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ error: 'mocked failure' }) })
   )

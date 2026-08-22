@@ -47,15 +47,5 @@ export default tseslint.config(
         console: 'readonly',
       },
     },
-  },
-  {
-    // rabbit-hole's own Playwright specs (see rabbit-hole-e2e/) — plain JS
-    // (that app has no TypeScript setup), run under Node via @playwright/test
-    files: ['rabbit-hole-e2e/tests/**/*.js'],
-    languageOptions: {
-      globals: {
-        setTimeout: 'readonly',
-      },
-    },
   }
 )
