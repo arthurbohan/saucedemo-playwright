@@ -85,16 +85,17 @@ export default defineConfig({
     },
     {
       // A different app entirely (rabbit-hole, a separate local repo) —
-      // Docker/cross-repo practice project, see rabbit-hole-e2e/. .spec.js
-      // (that app has no TypeScript setup) and data-testid (its own,
-      // standard convention — deliberately NOT changed to data-test just
-      // to match this repo's config) both override the top-level defaults
-      // above, which only apply to the saucedemo/jsonplaceholder projects.
-      // baseURL defaults to localhost for a plain local run;
-      // docker-compose.yml overrides it to the `app` service's hostname.
+      // Docker/cross-repo practice project, see rabbit-hole-e2e/. The specs
+      // are TypeScript like the rest of this repo, but data-testid (the
+      // rabbit-hole app's own, standard convention — deliberately NOT
+      // changed to data-test just to match this repo's config) still
+      // overrides the top-level default above, which only applies to the
+      // saucedemo/jsonplaceholder projects. baseURL defaults to localhost
+      // for a plain local run; docker-compose.yml overrides it to the
+      // `app` service's hostname.
       name: 'rabbit-hole',
       testDir: './rabbit-hole-e2e/tests',
-      testMatch: '**/*.spec.js',
+      testMatch: '**/*.spec.ts',
       use: {
         baseURL: process.env.RABBIT_HOLE_BASE_URL || 'http://localhost:3000',
         testIdAttribute: 'data-testid',
