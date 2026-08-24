@@ -3,6 +3,7 @@ export { LoginPage } from './loginPage'
 export { InventoryPage } from './inventoryPage'
 export { CartPage } from './cartPage'
 export { CheckoutPage } from './checkoutPage'
+export { ItemDetailPage } from './itemDetailPage'
 
 export type { SauceUser } from './loginPage'
 export type { ProductSlug, SortOption } from './inventoryPage'

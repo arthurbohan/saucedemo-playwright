@@ -84,6 +84,11 @@ export class InventoryPage extends BasePage {
         await this.page.waitForURL('/cart.html')
     }
 
+    async openItem(name: string) {
+        await this.itemByName(name).getByTestId('inventory-item-name').click()
+        await this.page.waitForURL(/inventory-item\.html/)
+    }
+
     async getItemNames(): Promise<string[]> {
         return this.itemNames.allTextContents()
     }

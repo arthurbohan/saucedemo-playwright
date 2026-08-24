@@ -4,6 +4,7 @@ import { LoginPage } from '../pages/loginPage'
 import { InventoryPage } from '../pages/inventoryPage'
 import { CartPage } from '../pages/cartPage'
 import { CheckoutPage } from '../pages/checkoutPage'
+import { ItemDetailPage } from '../pages/itemDetailPage'
 import { ProductSlug } from '../pages/inventoryPage'
 
 type PageFixtures = {
@@ -12,6 +13,7 @@ type PageFixtures = {
     cartPage: CartPage
     filledCartPage: CartPage
     checkoutPage: CheckoutPage
+    itemDetailPage: ItemDetailPage
 }
 
 const pageTest = base.extend<PageFixtures & AuthFixtures>({
@@ -47,6 +49,12 @@ const pageTest = base.extend<PageFixtures & AuthFixtures>({
         const cart = new CartPage(standardPage)
         await cart.checkout()
         await use(new CheckoutPage(standardPage))
+    },
+
+    itemDetailPage: async ({ standardPage }, use) => {
+        const inventory = new InventoryPage(standardPage)
+        await inventory.openItem('Sauce Labs Backpack')
+        await use(new ItemDetailPage(standardPage))
     },
 
 })
