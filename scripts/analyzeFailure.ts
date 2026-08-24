@@ -3,13 +3,21 @@
 /**
  * scripts/analyzeFailure.ts
  *
- * Entry point for failure analysis
- * Analyzes unique failures only, uses cache for efficiency
- * Outputs: ai-analysis-summary.md only
+ * Entry point for failure analysis. Analyzes unique failures only, uses
+ * cache for efficiency. Outputs: ai-analysis-summary.md only.
+ *
+ * Root-cause analysis runs through the Claude Code CLI subprocess client
+ * (helpers/claude/) rather than a billed API — authenticated with a
+ * Pro/Max subscription's CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`).
+ * helpers/analyzeFailure/core.ts only needs an { ask() } client plus a
+ * prompt-builder pair, so nothing in there is Claude-specific — self-
+ * healing (helpers/selfHealing/) and risk analysis/test generation stay on
+ * Groq (helpers/groq/), unaffected by this.
  */
 
 import 'dotenv/config'
-import { getGroqClient } from '../helpers/groq/client'
+import { getClaudeClient } from '../helpers/claude/client'
+import { buildFailureAnalysisPrompt, buildBatchAnalysisPrompt } from '../helpers/claude/prompts'
 import { getCollector } from '../helpers/analyzeFailure/collector'
 import { getReporter } from '../helpers/analyzeFailure/reporter'
 import { getLogger } from '../helpers/analyzeFailure/logger'
@@ -38,19 +46,19 @@ async function main() {
     const cacheStats = cache.getStats()
     logger.info(`📦 Cache: ${cacheStats.total} entries`)
 
-    // 2. Initialize Groq client
-    let groqClient
+    // 2. Initialize Claude client
+    let claudeClient
     try {
-        groqClient = getGroqClient()
+        claudeClient = getClaudeClient()
     } catch (error) {
-        logger.error(`Failed to initialize Groq client: ${error}`)
+        logger.error(`Failed to initialize Claude client: ${error}`)
         process.exit(1)
     }
 
     // 3. Analyze unique failures
     // SKIP_MANUAL_VERDICT=true drops the manual-tester "Manual Verdict"
     // section — pr-checks.yml sets this; full-regression.yml and local runs
-    // (npm run ai:analyze / npm run regression) leave it unset, so the
+    // (npm run analyze:failures / npm run regression) leave it unset, so the
     // verdict is included by default.
     const analyzer = createAnalyzer({
         batchThreshold: DEFAULT_CONFIG.batchThreshold,
@@ -63,7 +71,11 @@ async function main() {
         includeManualVerdict: process.env.SKIP_MANUAL_VERDICT !== 'true',
     })
 
-    const results = await analyzer.analyzeAll(failures, groqClient)
+    const results = await analyzer.analyzeAll(
+        failures,
+        claudeClient,
+        { buildFailureAnalysisPrompt, buildBatchAnalysisPrompt }
+    )
 
     // 4. Save Markdown report only
     const reporter = getReporter()
@@ -73,17 +85,17 @@ async function main() {
     const analysisStats = analyzer.getStats(results)
     logger.section('📊 Analysis Complete')
     logger.success(`Successfully analyzed: ${analysisStats.success}`)
-    
+
     if (analysisStats.failed > 0) {
         logger.failure(`Failed to analyze: ${analysisStats.failed}`)
     }
-    
+
     logger.info(`📈 Success rate: ${analysisStats.successRate}%`)
-    
+
     // Show cache stats after analysis
     const newCacheStats = cache.getStats()
     logger.info(`📦 Cache now: ${newCacheStats.total} entries`)
-    
+
     logger.info(`\n📄 Report saved: ${outputs.markdown}`)
 
     // 6. Exit with error code if any analysis failed

@@ -31,8 +31,18 @@ export type AnalyzeConfig = {
     includeManualVerdict?: boolean
 }
 
-export type GroqClient = {
+// Provider-agnostic: satisfied by both GroqClient (helpers/groq/client.ts)
+// and ClaudeSubprocessClient (helpers/claude/client.ts).
+export type AiClient = {
     ask: (prompt: string, systemPrompt: string, options?: any) => Promise<string>
+}
+
+// Lets analyzeAll() pull its prompt text from either helpers/groq/prompts
+// or helpers/claude/prompts — the two providers keep separate (identical)
+// copies, see helpers/claude/prompts/failureAnalysis.ts for why.
+export type PromptBuilder = {
+    buildFailureAnalysisPrompt: (testName: string, errorContext: string, includeManualVerdict?: boolean) => string
+    buildBatchAnalysisPrompt: (failures: Array<{ testName: string; errorContext: string }>, includeManualVerdict?: boolean) => string
 }
 
 export type CacheEntry = {

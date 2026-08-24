@@ -1,5 +1,11 @@
 /**
  * Prompts for failure analysis
+ *
+ * Deliberately identical in content to ../../groq/prompts/failureAnalysis.ts
+ * — the prompt engineering isn't provider-specific, only the client that
+ * sends it is (helpers/claude/client.ts's CLI subprocess vs. Groq's HTTP
+ * API). Kept as its own copy rather than a shared import so helpers/claude/
+ * stays a self-contained module, same shape as helpers/groq/.
  */
 
 export const FAILURE_ANALYSIS_SYSTEM = `

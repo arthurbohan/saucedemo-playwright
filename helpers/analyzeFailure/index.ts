@@ -22,7 +22,8 @@ export type {
     FailureInfo,
     AnalysisResult,
     AnalyzeConfig,
-    GroqClient,
+    AiClient,
+    PromptBuilder,
     CacheEntry,
 } from './types'
 
