@@ -4,7 +4,11 @@ services:
       # Cross-repo on purpose: rabbit hole is a separate local repo, not a
       # subfolder of this one. Docker build contexts can point anywhere on
       # disk — no need to vendor or submodule the other repo's source.
-      context: "../../rabbit hole"
+      # Overridable because the folder name differs locally ("rabbit hole",
+      # this machine's actual directory name) vs. in rabbit-hole's own CI
+      # (checked out as "rabbit-hole", its GitHub repo name) — see
+      # rabbit-hole's .github/workflows/e2e.yml.
+      context: "${RABBIT_HOLE_CONTEXT:-../../rabbit hole}"
     # No host port mapping — the `tests` service reaches this over the
     # Compose-internal network (http://app:3000), and publishing 3000 to
     # the host isn't needed for that. Also avoids clashing with a locally
