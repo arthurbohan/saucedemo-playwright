@@ -92,18 +92,24 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_GC: 1
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
 
-      # Runs only when tests fail — analyzes root cause via Groq API, for
-      # whoever fixes the automation. SKIP_MANUAL_VERDICT: no Telegram job
-      # reads this here anyway (see on-merge.yml), so the manual-tester
-      # verdict section — meant for full-regression.yml's audience — is
-      # skipped rather than generated and never shown to anyone.
-      # Results appear as a collapsible group in GitHub Actions logs.
+      # Runs only when tests fail — analyzes root cause via the Claude Code
+      # CLI (helpers/claude/), authenticated with a Pro/Max subscription's
+      # CLAUDE_CODE_OAUTH_TOKEN rather than a billed API key — for whoever
+      # fixes the automation. SKIP_MANUAL_VERDICT: no Telegram job reads
+      # this here anyway (see on-merge.yml), so the manual-tester verdict
+      # section — meant for full-regression.yml's audience — is skipped
+      # rather than generated and never shown to anyone. Results appear as
+      # a collapsible group in GitHub Actions logs.
+      - name: Install Claude Code CLI
+        if: failure()
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: AI Analysis of failures
         if: failure()
         run: npx tsx scripts/analyzeFailure.ts
         env:
           CI: true
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SKIP_MANUAL_VERDICT: true
 
       # Always runs — a healed locator can pass, so this isn't gated on failure()
@@ -165,7 +171,10 @@ jobs:
   test-api-smoke:
     name: API Smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 -> 8: Claude CLI calls (helpers/claude/) run several seconds to
+    # minutes slower per call than Groq's plain HTTP request, on top of the
+    # CLI install step itself — see "Install Claude Code CLI" below.
+    timeout-minutes: 8
 
     steps:
       - name: Checkout code
@@ -185,12 +194,16 @@ jobs:
         env:
           CI: true
 
+      - name: Install Claude Code CLI
+        if: failure()
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: AI Analysis of failures
         if: failure()
         run: npx tsx scripts/analyzeFailure.ts
         env:
           CI: true
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SKIP_MANUAL_VERDICT: true
 
       - name: Upload AI analysis summary

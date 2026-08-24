@@ -39,7 +39,8 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 | [ESLint](https://eslint.org) + [typescript-eslint](https://typescript-eslint.io) | ^10.x / ^8.x | Lint — required check in CI, run before every push |
 | [GitHub Actions](https://github.com/features/actions) | — | CI/CD pipeline |
 | [Docker](https://www.docker.com) | — | Consistent browser environment in CI |
-| [Groq API](https://console.groq.com) | — | AI-powered failure analysis |
+| [Groq API](https://console.groq.com) | — | Self-healing locators, risk analysis, test generation |
+| [Claude Code](https://claude.com/product/claude-code) CLI | — | AI-powered failure analysis (subprocess, subscription auth) |
 
 ---
 
@@ -88,10 +89,14 @@ project/
 │           └── api.spec.ts
 │
 ├── helpers/                         ← Logic behind scripts/ (one module = one responsibility)
-│   ├── groq/                           Groq API client + every prompt builder
+│   ├── groq/                           Groq API client + prompt builders
 │   │   ├── client.ts
-│   │   └── prompts/                    failureAnalysis · selfHealing · riskAnalysis · generateTests
-│   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report
+│   │   └── prompts/                    selfHealing · riskAnalysis · generateTests
+│   ├── claude/                         Claude Code CLI subprocess client — same shape as groq/,
+│   │   ├── client.ts                     used for failure analysis only (self-healing/risk/
+│   │   └── prompts/                      generation stay on Groq) — see § AI Failure Analysis
+│   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report (client-agnostic —
+│   │                                    takes any { ask() } client + prompt builder, see core.ts)
 │   ├── generateTests/                  Feature description → generated spec file (prompt lives in groq/prompts/)
 │   ├── selfHealing/                    Locator failed → AI picks alternative from DOM snapshot
 │   │   ├── core.ts                        heal() — logs + Allure-tags every attempt (see log.ts/reporter.ts)
@@ -102,7 +107,8 @@ project/
 │   └── git/                            git diff helper shared by risk/selection scripts
 │
 ├── scripts/                         ← CLI entry points (thin wrappers around helpers/)
-│   ├── analyzeFailure.ts               AI root-cause analysis of failed tests (ai:analyze)
+│   ├── analyzeFailure.ts               AI root-cause analysis via the Claude Code CLI
+│   │                                        (analyze:failures) — see § AI Failure Analysis
 │   ├── generateTests.ts                AI test-case generation (ai:generate)
 │   ├── generateFromLivePage.ts          Generate for any URL, no Page Object needed (ai:generate:live)
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
@@ -231,8 +237,14 @@ cp .env.example .env
 ```
 
 ```env
-# Groq API key for AI failure analysis — free at console.groq.com
+# Groq API key — self-healing, risk analysis, test generation. Free at
+# console.groq.com
 GROQ_API_KEY=gsk_...
+
+# Claude subscription OAuth token — failure analysis (analyze:failures)
+# runs through the Claude Code CLI, not a billed API key. Generate with:
+# claude setup-token
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
 ---
@@ -269,13 +281,18 @@ npx playwright codegen https://www.saucedemo.com
 
 ## 🤖 AI Failure Analysis
 
-When tests fail, the AI script reads `test-results/*/error-context.md`
-and sends it to [Groq API](https://console.groq.com) (free, no credit card)
-for root cause analysis.
+When tests fail, the AI script reads `test-results/*/error-context.md` and
+sends it to the [Claude Code](https://claude.com/product/claude-code) CLI
+(`helpers/claude/`) for root cause analysis — a subprocess call
+(`claude -p`) authenticated with a Pro/Max subscription's
+`CLAUDE_CODE_OAUTH_TOKEN`, not a separately billed API key. Self-healing,
+risk analysis and test generation are unaffected — those stay on Groq
+(`helpers/groq/`); only this one path moved, since it's low-frequency
+(once or twice a run) and benefits most from a stronger reasoning model.
 
 ```bash
 # Run manually after a test failure
-npm run ai:analyze
+npm run analyze:failures
 ```
 
 In CI, this runs automatically on failure and outputs a collapsible group
@@ -627,9 +644,10 @@ directly).
 ```
 Settings → Secrets and variables → Actions → New repository secret
 
-GROQ_API_KEY        — AI failure analysis (free at console.groq.com)
-TELEGRAM_BOT_TOKEN  — Telegram notifications
-TELEGRAM_CHAT_ID    — Telegram chat or channel ID
+GROQ_API_KEY          — self-healing, risk analysis, test generation (free at console.groq.com)
+CLAUDE_CODE_OAUTH_TOKEN — AI failure analysis (from a Claude subscription — run `claude setup-token`)
+TELEGRAM_BOT_TOKEN    — Telegram notifications
+TELEGRAM_CHAT_ID      — Telegram chat or channel ID
 ```
 
 ### Artifacts
@@ -725,7 +743,7 @@ npm run allure:open           # open Allure report
 npm run allure:report         # generate + open
 
 # AI
-npm run ai:analyze            # analyze latest test failures via Groq
+npm run analyze:failures       # analyze latest test failures via the Claude Code CLI
 npm run ai:risk                # pre-merge risk analysis of the current diff
 npm run ai:select              # impact-based test selection (deterministic)
 npm run ai:generate            # generate spec files for all features (login, inventory, checkout, api)

@@ -2,7 +2,7 @@
  * Core failure analysis logic
  */
 
-import type { AnalysisResult, FailureInfo, AnalyzeConfig, GroqClient } from './types'
+import type { AnalysisResult, FailureInfo, AnalyzeConfig, AiClient, PromptBuilder } from './types'
 import { DEFAULT_CONFIG, SYSTEM_PROMPTS } from './config'
 import { getLogger } from './logger'
 import { getCache } from './cache'
@@ -21,7 +21,8 @@ export class FailureAnalyzer {
      */
     async analyzeAll(
         failures: FailureInfo[],
-        groqClient: GroqClient
+        aiClient: AiClient,
+        promptBuilder: PromptBuilder
     ): Promise<AnalysisResult[]> {
         if (failures.length === 0) {
             return []
@@ -60,7 +61,7 @@ export class FailureAnalyzer {
 
         // Batch analysis for large number of failures
         if (failures.length > this.config.batchThreshold) {
-            const batchResults = await this.analyzeBatch(failures, groqClient)
+            const batchResults = await this.analyzeBatch(failures, aiClient, promptBuilder)
             results.push(...batchResults)
         }
 
@@ -69,7 +70,8 @@ export class FailureAnalyzer {
         if (remainingFailures.length > 0) {
             const individualResults = await this.analyzeIndividual(
                 remainingFailures,
-                groqClient
+                aiClient,
+                promptBuilder
             )
             results.push(...individualResults)
         }
@@ -82,19 +84,18 @@ export class FailureAnalyzer {
      */
     private async analyzeBatch(
         failures: FailureInfo[],
-        groqClient: GroqClient
+        aiClient: AiClient,
+        promptBuilder: PromptBuilder
     ): Promise<AnalysisResult[]> {
         this.logger.info('Batch analyzing all failures...')
 
         try {
-            const { buildBatchAnalysisPrompt } = await import('../groq/prompts')
-
-            const batchPrompt = buildBatchAnalysisPrompt(
+            const batchPrompt = promptBuilder.buildBatchAnalysisPrompt(
                 failures.map(f => ({ testName: f.testName, errorContext: f.content })),
                 this.config.includeManualVerdict
             )
 
-            const analysis = await groqClient.ask(
+            const analysis = await aiClient.ask(
                 batchPrompt,
                 SYSTEM_PROMPTS.BATCH,
                 { maxTokens: this.config.batchMaxTokens }
@@ -130,7 +131,8 @@ export class FailureAnalyzer {
      */
     private async analyzeIndividual(
         failures: FailureInfo[],
-        groqClient: GroqClient
+        aiClient: AiClient,
+        promptBuilder: PromptBuilder
     ): Promise<AnalysisResult[]> {
         const results: AnalysisResult[] = []
 
@@ -142,10 +144,9 @@ export class FailureAnalyzer {
             this.logger.progress(i + 1, failures.length, `${failure.testName}`)
 
             try {
-                const { buildFailureAnalysisPrompt } = await import('../groq/prompts')
-                const prompt = buildFailureAnalysisPrompt(failure.testName, failure.content, this.config.includeManualVerdict)
+                const prompt = promptBuilder.buildFailureAnalysisPrompt(failure.testName, failure.content, this.config.includeManualVerdict)
 
-                const analysis = await groqClient.ask(
+                const analysis = await aiClient.ask(
                     prompt,
                     SYSTEM_PROMPTS.INDIVIDUAL,
                     {
