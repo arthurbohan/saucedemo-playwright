@@ -53,6 +53,7 @@ project/
 │   │   ├── basePage.ts                 Abstract base: goto(), waitForPageLoad(), getTextOf()
 │   │   ├── loginPage.ts                Login form
 │   │   ├── inventoryPage.ts            Product catalog
+│   │   ├── itemDetailPage.ts           Single product detail page
 │   │   ├── cartPage.ts                 Shopping cart
 │   │   ├── checkoutPage.ts             Checkout flow (3 steps)
 │   │   └── index.ts                    Barrel export
@@ -80,6 +81,7 @@ project/
 │       │   ├── login.spec.ts
 │       │   ├── inventory.spec.ts
 │       │   ├── inventory.healing.spec.ts  Self-healing locator demo
+│       │   ├── itemDetail.spec.ts
 │       │   ├── cart.spec.ts
 │       │   └── checkout.spec.ts
 │       └── api/                        API tests (project: jp-api)
@@ -524,15 +526,16 @@ the only place that's decided:
 
 - **[`pr-checks.yml`](.github/workflows/pr-checks.yml)** — `on: pull_request`.
   The merge gate — but only a **smoke subset**, tests tagged `@smoke` (one
-  per critical flow: login, add-to-cart, cart navigation, a full checkout,
-  an API CRUD chain), not the whole suite. Two reasons, not just speed: this
-  repo tests a third-party app it doesn't control (saucedemo.com,
-  jsonplaceholder), so an unrelated outage there would otherwise block every
-  PR the same way — smaller gate surface, less exposure. The full suite
-  still runs, just not as a PR gate — see `full-regression.yml` below. (A
-  known, real trade-off: some regressions that a full PR-gate run would
-  catch are now only caught by `full-regression.yml`, not on every PR — that
-  was the deliberate call here, not an oversight.)
+  per critical flow: login, add-to-cart, cart navigation, product detail
+  navigation, a full checkout, an API CRUD chain), not the whole suite. Two
+  reasons, not just speed: this repo tests a third-party app it doesn't
+  control (saucedemo.com, jsonplaceholder), so an unrelated outage there
+  would otherwise block every PR the same way — smaller gate surface, less
+  exposure. The full suite still runs, just not as a PR gate — see
+  `full-regression.yml` below. (A known, real trade-off: some regressions
+  that a full PR-gate run would catch are now only caught by
+  `full-regression.yml`, not on every PR — that was the deliberate call
+  here, not an oversight.)
 - **[`on-merge.yml`](.github/workflows/on-merge.yml)** — `on: push` to `main`.
   Doesn't re-run tests *or* publish a report — a merge only happens once
   `pr-checks.yml` already passed, so there's nothing new to show. Just a
@@ -557,7 +560,7 @@ pr-checks.yml (on: pull_request)            on-merge.yml (on: push to main)
     ├── lint            → required, seconds    ├── find-pr-run
     │                                          │     └── resolves which
     ├── test-e2e-smoke  → required, @smoke     │        pr-checks.yml run
-    │     └── the actual gate, ~5 tests        │        tested this exact
+    │     └── the actual gate, ~6 tests        │        tested this exact
     │     └── posts self-healing summary       │        code (any merge
     │          as a PR comment                 │        strategy)
     │                                          │

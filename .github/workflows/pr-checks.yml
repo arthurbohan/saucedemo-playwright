@@ -51,13 +51,14 @@ jobs:
   # ─── JOB 1: E2E smoke ─────────────────────────────────────────────────────
   #
   # This is the actual merge gate — a small, curated set of tests tagged
-  # @smoke (one per critical flow: login, add-to-cart, cart navigation, a
-  # full checkout, an API CRUD chain), not the whole suite. Running
-  # everything on every PR doesn't scale once the suite is large, and this
-  # repo tests a third-party app it doesn't control — an unrelated outage
-  # there shouldn't block every PR the same way a 1000-test run would. The
-  # full suite still runs, just not as a PR gate — see full-regression.yml.
-  # No sharding: 5 tests don't need 4 workers.
+  # @smoke (one per critical flow: login, add-to-cart, cart navigation,
+  # product detail navigation, a full checkout, an API CRUD chain), not the
+  # whole suite. Running everything on every PR doesn't scale once the
+  # suite is large, and this repo tests a third-party app it doesn't
+  # control — an unrelated outage there shouldn't block every PR the same
+  # way a 1000-test run would. The full suite still runs, just not as a PR
+  # gate — see full-regression.yml.
+  # No sharding: 6 tests don't need 4 workers.
 
   test-e2e-smoke:
     name: E2E Smoke
