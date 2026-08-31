@@ -39,8 +39,8 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 | [ESLint](https://eslint.org) + [typescript-eslint](https://typescript-eslint.io) | ^10.x / ^8.x | Lint — required check in CI, run before every push |
 | [GitHub Actions](https://github.com/features/actions) | — | CI/CD pipeline |
 | [Docker](https://www.docker.com) | — | Consistent browser environment in CI |
-| [Groq API](https://console.groq.com) | — | Self-healing locators, risk analysis, test generation |
-| [Claude Code](https://claude.com/product/claude-code) CLI | — | AI-powered failure analysis (subprocess, subscription auth) |
+| [Groq API](https://console.groq.com) | — | Self-healing locators, risk analysis, live-page generation |
+| [Claude Code](https://claude.com/product/claude-code) CLI | — | Failure analysis + test generation (subprocess, subscription auth) |
 
 ---
 
@@ -91,13 +91,16 @@ project/
 ├── helpers/                         ← Logic behind scripts/ (one module = one responsibility)
 │   ├── groq/                           Groq API client + prompt builders
 │   │   ├── client.ts
-│   │   └── prompts/                    selfHealing · riskAnalysis · generateTests
+│   │   └── prompts/                    selfHealing · riskAnalysis · generateTests (the last one
+│   │                                      only for generateFromLivePage.ts now, see below)
 │   ├── claude/                         Claude Code CLI subprocess client — same shape as groq/,
-│   │   ├── client.ts                     used for failure analysis only (self-healing/risk/
-│   │   └── prompts/                      generation stay on Groq) — see § AI Failure Analysis
+│   │   ├── client.ts                     used for failure analysis + test generation (self-
+│   │   └── prompts/                      healing/risk analysis stay on Groq) — see §§ AI Failure
+│   │                                      Analysis / AI Test Generation
 │   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report (client-agnostic —
 │   │                                    takes any { ask() } client + prompt builder, see core.ts)
-│   ├── generateTests/                  Feature description → generated spec file (prompt lives in groq/prompts/)
+│   ├── generateTests/                  Feature description → generated spec file (client-agnostic,
+│   │                                    same pattern as analyzeFailure/ — prompt lives in claude/prompts/)
 │   ├── selfHealing/                    Locator failed → AI picks alternative from DOM snapshot
 │   │   ├── core.ts                        heal() — logs + Allure-tags every attempt (see log.ts/reporter.ts)
 │   │   ├── log.ts                         JSONL log of every healing attempt (test-results/self-healing-log.jsonl)
@@ -109,8 +112,9 @@ project/
 ├── scripts/                         ← CLI entry points (thin wrappers around helpers/)
 │   ├── analyzeFailure.ts               AI root-cause analysis via the Claude Code CLI
 │   │                                        (analyze:failures) — see § AI Failure Analysis
-│   ├── generateTests.ts                AI test-case generation (ai:generate)
+│   ├── generateTests.ts                AI test-case generation via the Claude Code CLI (ai:generate)
 │   ├── generateFromLivePage.ts          Generate for any URL, no Page Object needed (ai:generate:live)
+│   │                                        — still on Groq, see § AI Test Generation
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
 │   ├── selectTests.ts                  Impact-based regression selection (ai:select)
 │   └── summarizeHealing.ts             Self-healing audit report (healing:summary); with a
@@ -237,13 +241,13 @@ cp .env.example .env
 ```
 
 ```env
-# Groq API key — self-healing, risk analysis, test generation. Free at
-# console.groq.com
+# Groq API key — self-healing, risk analysis, and live-page generation
+# (ai:generate:live). Free at console.groq.com
 GROQ_API_KEY=gsk_...
 
-# Claude subscription OAuth token — failure analysis (analyze:failures)
-# runs through the Claude Code CLI, not a billed API key. Generate with:
-# claude setup-token
+# Claude subscription OAuth token — failure analysis (analyze:failures) and
+# test generation (ai:generate) run through the Claude Code CLI, not a
+# billed API key. Generate with: claude setup-token
 CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
@@ -285,10 +289,12 @@ When tests fail, the AI script reads `test-results/*/error-context.md` and
 sends it to the [Claude Code](https://claude.com/product/claude-code) CLI
 (`helpers/claude/`) for root cause analysis — a subprocess call
 (`claude -p`) authenticated with a Pro/Max subscription's
-`CLAUDE_CODE_OAUTH_TOKEN`, not a separately billed API key. Self-healing,
-risk analysis and test generation are unaffected — those stay on Groq
-(`helpers/groq/`); only this one path moved, since it's low-frequency
-(once or twice a run) and benefits most from a stronger reasoning model.
+`CLAUDE_CODE_OAUTH_TOKEN`, not a separately billed API key. Self-healing and
+risk analysis are unaffected — those stay on Groq (`helpers/groq/`). Test
+generation (`ai:generate`) later moved the same way — see § AI Test
+Generation — since both paths are low-frequency (once or a few times a run,
+never inside a live test's timeout budget) and benefit most from a stronger
+reasoning model.
 
 ```bash
 # Run manually after a test failure
@@ -396,11 +402,15 @@ Page Object selector has drifted and is due a real fix.
 
 ## ✨ AI Test Generation
 
-Groq generates a first-draft spec file from a feature description
-(`helpers/generateTests/features.ts`). Covers both domains — UI (Page Object
-driven) and API (jsonplaceholder) — each with its own prompt context, since
-the two need completely different rules (locators/fixtures vs. HTTP client/
-response shapes).
+The Claude Code CLI (`helpers/claude/`) generates a first-draft spec file
+from a feature description (`helpers/generateTests/features.ts`) — same
+subscription-authenticated subprocess as failure analysis, same reasoning
+for why it moved off Groq (see § AI Failure Analysis). Covers both domains —
+UI (Page Object driven) and API (jsonplaceholder) — each with its own
+prompt context, since the two need completely different rules
+(locators/fixtures vs. HTTP client/response shapes).
+`helpers/generateTests/generator.ts` is client-agnostic (any `{ ask() }`
+client + prompt source), the same pattern as `helpers/analyzeFailure/core.ts`.
 
 ```bash
 npm run ai:generate              # all features (login, inventory, checkout, api)
@@ -434,7 +444,7 @@ prompt — e.g. importing `ShippingInfoBuilder` from `'../../pages'` when the
 prompt explicitly says `'../../builders'`. Rather than leave that for a
 human to catch, `scripts/generateTests.ts` typechecks the file it just wrote
 (`helpers/generateTests/validator.ts`, scoped to that file's `tsc` output)
-and, on failure, sends the exact errors back to Groq for a targeted fix —
+and, on failure, sends the exact errors back to Claude for a targeted fix —
 up to 2 attempts before it gives up and says so. This only catches
 compiler-visible mistakes, not wrong assumptions about app behavior the
 prompt never documented (that class of bug still needs a human to notice
@@ -644,7 +654,9 @@ directly).
 ```
 Settings → Secrets and variables → Actions → New repository secret
 
-GROQ_API_KEY          — self-healing, risk analysis, test generation (free at console.groq.com)
+GROQ_API_KEY          — self-healing + risk analysis (free at console.groq.com) — the only
+                        two AI paths CI actually runs; ai:generate/ai:generate:live are
+                        local-only, never wired into a workflow
 CLAUDE_CODE_OAUTH_TOKEN — AI failure analysis (from a Claude subscription — run `claude setup-token`)
 TELEGRAM_BOT_TOKEN    — Telegram notifications
 TELEGRAM_CHAT_ID      — Telegram chat or channel ID
@@ -746,7 +758,8 @@ npm run allure:report         # generate + open
 npm run analyze:failures       # analyze latest test failures via the Claude Code CLI
 npm run ai:risk                # pre-merge risk analysis of the current diff
 npm run ai:select              # impact-based test selection (deterministic)
-npm run ai:generate            # generate spec files for all features (login, inventory, checkout, api)
+npm run ai:generate            # generate spec files for all features via the Claude Code CLI
 npm run ai:generate:api        # generate spec file for the API suite only
+npm run ai:generate:live       # generate for any live URL, no Page Object needed — still via Groq
 npm run healing:summary        # build self-healing-summary.md from this run's healing log
 ```
