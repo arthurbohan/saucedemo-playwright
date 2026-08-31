@@ -183,4 +183,47 @@ test.describe('Inventory page', () => {
 
     })
 
+    test.describe('Reset App State', () => {
+
+        test('clears the cart badge/count', async ({ inventoryPage }) => {
+            await inventoryPage.addToCart('sauce-labs-backpack')
+            await inventoryPage.addToCart('sauce-labs-bike-light')
+            expect(await inventoryPage.getCartCount()).toBe(2)
+
+            await inventoryPage.resetAppState()
+
+            expect(await inventoryPage.getCartCount()).toBe(0)
+            await expect(inventoryPage.cartBadge).not.toBeVisible()
+        })
+
+        test('does NOT reset an already-added item\'s button back to "Add to cart"', async ({ inventoryPage }) => {
+            const slug: ProductSlug = 'sauce-labs-fleece-jacket'
+            await inventoryPage.addToCart(slug)
+            await expect(inventoryPage.removeBtn(slug)).toBeVisible()
+
+            await inventoryPage.resetAppState()
+
+            expect(await inventoryPage.getCartCount()).toBe(0)
+            await expect(inventoryPage.removeBtn(slug)).toBeVisible()
+            await expect(inventoryPage.addToCartBtn(slug)).not.toBeVisible()
+        })
+
+        test('does not reset the sort order', async ({ inventoryPage }) => {
+            await inventoryPage.sortBy('hilo')
+
+            await inventoryPage.resetAppState()
+
+            await expect(inventoryPage.sortDropdown).toHaveValue('hilo')
+        })
+
+        test('leaves the sidebar open — does not auto-close like logout does', async ({ inventoryPage }) => {
+            await inventoryPage.resetAppState()
+            await expect(inventoryPage.openedBurgerMenu).toBeVisible()
+
+            await inventoryPage.closeBurgerMenu()
+            await expect(inventoryPage.openedBurgerMenu).not.toBeVisible()
+        })
+
+    })
+
 })
