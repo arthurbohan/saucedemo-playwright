@@ -6,6 +6,7 @@
  */
 
 export { generateSpec, fixSpec } from './generator'
+export type { AiClient, PromptSource } from './generator'
 export { saveGeneratedSpec, previewCode } from './writer'
 export { typeCheckFile }         from './validator'
 export { FEATURE_DESCRIPTIONS }  from './features'

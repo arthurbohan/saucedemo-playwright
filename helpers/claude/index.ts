@@ -17,6 +17,7 @@ export type {
 
 // Prompts (explicit exports)
 export * from './prompts/failureAnalysis'
+export * from './prompts/generateTests'
 
 // Default export
 export default {

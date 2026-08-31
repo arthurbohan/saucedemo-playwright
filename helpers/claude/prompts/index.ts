@@ -9,3 +9,10 @@ export {
     buildDetailedFailurePrompt,
     buildBatchAnalysisPrompt,
 } from './failureAnalysis'
+
+// Test generation prompts
+export {
+    GENERATE_TESTS_SYSTEM,
+    buildGeneratePrompt,
+    buildFixTestPrompt,
+} from './generateTests'
