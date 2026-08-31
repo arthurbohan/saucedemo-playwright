@@ -1,13 +1,14 @@
 /**
- * Prompts for AI test generation (scripts/generateTests.ts)
+ * Prompts for AI test generation (scripts/generateTests.ts and
+ * scripts/generateFromLivePage.ts — the latter only uses
+ * GENERATE_TESTS_SYSTEM below, not buildGeneratePrompt/buildFixTestPrompt).
  *
- * Deliberately identical in content to
- * ../../groq/prompts/generateTests.ts — the prompt engineering (project
- * architecture, import rules, house style) isn't provider-specific, only
- * the client that sends it is. Kept as its own copy rather than a shared
- * import so helpers/claude/ stays a self-contained module, same shape as
- * helpers/groq/ — see helpers/claude/prompts/failureAnalysis.ts for the
- * same reasoning applied there first.
+ * Used to have a Groq twin (helpers/groq/prompts/generateTests.ts) before
+ * both scripts moved to the Claude Code CLI — removed once nothing
+ * imported it anymore, same as helpers/groq/prompts/failureAnalysis.ts
+ * before it. See helpers/claude/prompts/failureAnalysis.ts for the
+ * original reasoning on why this lives in its own module rather than a
+ * shared import.
  */
 
 import fs from 'fs'

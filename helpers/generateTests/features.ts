@@ -6,7 +6,7 @@
  *
  * UI features (login/inventory/checkout) deliberately do NOT restate
  * locators, URLs, or anything else already visible in the real Page Object
- * source — buildSystemContextUI() in helpers/groq/prompts/generateTests.ts
+ * source — buildSystemContextUI() in helpers/claude/prompts/generateTests.ts
  * reads those files directly now, so duplicating them here would just be a
  * second copy to drift out of sync (which is exactly how checkout's
  * cancelButton fact went stale here while the Page Object's own JSDoc had

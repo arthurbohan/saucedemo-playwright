@@ -7,12 +7,13 @@
  * prior knowledge of — no Page Object, no fixtures. `ai:generate` (see
  * scripts/generateTests.ts) only works because this project's whole Page
  * Object layer is spelled out by hand in its prompt
- * (helpers/groq/prompts/generateTests.ts) — it can't generate anything for
+ * (helpers/claude/prompts/generateTests.ts) — it can't generate anything for
  * a page it has no description of. This visits the page live instead and
  * captures a real accessibility snapshot — reusing
  * helpers/selfHealing/snapshot.ts, the exact mechanism self-healing already
- * uses to find elements at runtime — then asks Groq to write the test from
- * that snapshot alone.
+ * uses to find elements at runtime — then asks Claude to write the test from
+ * that snapshot alone, through the same Claude Code CLI subprocess client
+ * (helpers/claude/) as ai:generate and analyze:failures.
  *
  * Deliberately a different tool from `ai:generate`, not a replacement: that
  * one extends this project's maintained suite; this one is for a page with
@@ -33,8 +34,8 @@ import 'dotenv/config'
 import { chromium } from '@playwright/test'
 import fs from 'fs'
 import path from 'path'
-import { getGroqClient } from '../helpers/groq/client'
-import { GENERATE_TESTS_SYSTEM } from '../helpers/groq/prompts/generateTests'
+import { getClaudeClient } from '../helpers/claude/client'
+import { GENERATE_TESTS_SYSTEM } from '../helpers/claude/prompts/generateTests'
 import { getPageSnapshot, getInteractiveElements } from '../helpers/selfHealing/snapshot'
 
 function buildPrompt(url: string, task: string, snapshot: string, elements: string): string {
@@ -101,15 +102,11 @@ async function main() {
 
     console.log('Interactive elements found:')
     console.log(elements)
-    console.log('\nGenerating spec from the live snapshot via Groq...')
+    console.log('\nGenerating spec from the live snapshot via Claude...')
 
-    const client = getGroqClient()
+    const client = getClaudeClient()
     const prompt = buildPrompt(url, task, snapshot, elements)
-    const code = await client.ask(
-        prompt,
-        GENERATE_TESTS_SYSTEM,
-        { temperature: 0.1, maxTokens: 2000 }
-    )
+    const code = await client.ask(prompt, GENERATE_TESTS_SYSTEM)
 
     const clean = code
         .replace(/^```typescript\n?/m, '')
