@@ -39,8 +39,8 @@ and REST API tests for [jsonplaceholder.typicode.com](https://jsonplaceholder.ty
 | [ESLint](https://eslint.org) + [typescript-eslint](https://typescript-eslint.io) | ^10.x / ^8.x | Lint — required check in CI, run before every push |
 | [GitHub Actions](https://github.com/features/actions) | — | CI/CD pipeline |
 | [Docker](https://www.docker.com) | — | Consistent browser environment in CI |
-| [Groq API](https://console.groq.com) | — | Self-healing locators, risk analysis, live-page generation |
-| [Claude Code](https://claude.com/product/claude-code) CLI | — | Failure analysis + test generation (subprocess, subscription auth) |
+| [Groq API](https://console.groq.com) | — | Self-healing locators, risk analysis |
+| [Claude Code](https://claude.com/product/claude-code) CLI | — | Failure analysis + all test generation (subprocess, subscription auth) |
 
 ---
 
@@ -91,12 +91,11 @@ project/
 ├── helpers/                         ← Logic behind scripts/ (one module = one responsibility)
 │   ├── groq/                           Groq API client + prompt builders
 │   │   ├── client.ts
-│   │   └── prompts/                    selfHealing · riskAnalysis · generateTests (the last one
-│   │                                      only for generateFromLivePage.ts now, see below)
+│   │   └── prompts/                    selfHealing · riskAnalysis
 │   ├── claude/                         Claude Code CLI subprocess client — same shape as groq/,
-│   │   ├── client.ts                     used for failure analysis + test generation (self-
-│   │   └── prompts/                      healing/risk analysis stay on Groq) — see §§ AI Failure
-│   │                                      Analysis / AI Test Generation
+│   │   ├── client.ts                     used for failure analysis + all test generation
+│   │   └── prompts/                      (self-healing/risk analysis stay on Groq) — see §§ AI
+│   │                                      Failure Analysis / AI Test Generation
 │   ├── analyzeFailure/                 Collect → dedupe/cache → analyze → report (client-agnostic —
 │   │                                    takes any { ask() } client + prompt builder, see core.ts)
 │   ├── generateTests/                  Feature description → generated spec file (client-agnostic,
@@ -114,7 +113,7 @@ project/
 │   │                                        (analyze:failures) — see § AI Failure Analysis
 │   ├── generateTests.ts                AI test-case generation via the Claude Code CLI (ai:generate)
 │   ├── generateFromLivePage.ts          Generate for any URL, no Page Object needed (ai:generate:live)
-│   │                                        — still on Groq, see § AI Test Generation
+│   │                                        — also via the Claude Code CLI, see § AI Test Generation
 │   ├── analyzeRisk.ts                  AI pre-merge risk analysis (ai:risk)
 │   ├── selectTests.ts                  Impact-based regression selection (ai:select)
 │   └── summarizeHealing.ts             Self-healing audit report (healing:summary); with a
@@ -241,13 +240,12 @@ cp .env.example .env
 ```
 
 ```env
-# Groq API key — self-healing, risk analysis, and live-page generation
-# (ai:generate:live). Free at console.groq.com
+# Groq API key — self-healing, risk analysis. Free at console.groq.com
 GROQ_API_KEY=gsk_...
 
 # Claude subscription OAuth token — failure analysis (analyze:failures) and
-# test generation (ai:generate) run through the Claude Code CLI, not a
-# billed API key. Generate with: claude setup-token
+# all test generation (ai:generate, ai:generate:live) run through the
+# Claude Code CLI, not a billed API key. Generate with: claude setup-token
 CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
@@ -458,18 +456,20 @@ a page it has no description of. `scripts/generateFromLivePage.ts` is a
 different tool for that case: it visits a URL live, captures a real
 accessibility snapshot (`helpers/selfHealing/snapshot.ts` — the same
 mechanism self-healing already uses to find elements at runtime), and asks
-Groq to write a self-contained spec from that snapshot alone — no Page
-Object, no fixtures, nothing this project needs to already know about the
-target.
+Claude (same CLI subprocess client as `ai:generate`/`analyze:failures`) to
+write a self-contained spec from that snapshot alone — no Page Object, no
+fixtures, nothing this project needs to already know about the target.
 
 ```bash
 npm run ai:generate:live -- <url> "<task description>"
 ```
 
-Verified against three unrelated pages with three different interaction
-patterns — a login form with redirects, unlabeled checkboxes, and
-dynamically added/removed elements — all three generated tests passed
-against the live site on the first attempt, no fixes needed.
+Originally verified against three unrelated pages with three different
+interaction patterns — a login form with redirects, unlabeled checkboxes,
+and dynamically added/removed elements — all three generated tests passed
+against the live site on the first attempt, no fixes needed. Re-verified
+against the login-form case after the move to Claude: same result, all
+generated tests passed on the first attempt.
 
 This is a draft-generation tool, not a replacement for `ai:generate`:
 useful the moment you're pointed at a page with no suite yet, disposable
@@ -760,6 +760,6 @@ npm run ai:risk                # pre-merge risk analysis of the current diff
 npm run ai:select              # impact-based test selection (deterministic)
 npm run ai:generate            # generate spec files for all features via the Claude Code CLI
 npm run ai:generate:api        # generate spec file for the API suite only
-npm run ai:generate:live       # generate for any live URL, no Page Object needed — still via Groq
+npm run ai:generate:live       # generate for any live URL, no Page Object needed
 npm run healing:summary        # build self-healing-summary.md from this run's healing log
 ```
