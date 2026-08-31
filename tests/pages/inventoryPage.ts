@@ -44,6 +44,8 @@ export class InventoryPage extends BasePage {
     get pageTitle() { return this.page.locator('.title') }
     get burgerMenu() { return this.page.locator('#react-burger-menu-btn') }
     get openedBurgerMenu() { return this.page.locator('.bm-menu-wrap') }
+    get resetAppStateLink() { return this.page.getByTestId('reset-sidebar-link') }
+    get closeMenuButton() { return this.page.locator('#react-burger-cross-btn') }
 
     addToCartBtn(slug: ProductSlug) {
         return this.page.getByTestId(`add-to-cart-${slug}`)
@@ -121,6 +123,25 @@ export class InventoryPage extends BasePage {
         await this.openBurgerMenu()
         await this.page.getByTestId('logout-sidebar-link').click()
         await this.page.waitForURL('/')
+    }
+
+    /**
+     * COMPOSITE — same call-order caveat as logout() above. Sidebar stays
+     * open afterward (use closeBurgerMenu() if needed). Clears the cart
+     * badge/count but not each item's own Add/Remove button state — use
+     * getCartCount(), not addToCartBtn/removeBtn, to check cart state
+     * right after this.
+     */
+    async resetAppState() {
+        await this.openBurgerMenu()
+        await this.resetAppStateLink.click()
+        await this.cartBadge.waitFor({ state: 'hidden' })
+    }
+
+    /** Closes the sidebar — burgerMenu is covered while open, so use this instead. */
+    async closeBurgerMenu() {
+        await this.closeMenuButton.click()
+        await this.openedBurgerMenu.waitFor({ state: 'hidden' })
     }
 
     // ── Self-healing methods — use BasePage wrappers ──────────────
